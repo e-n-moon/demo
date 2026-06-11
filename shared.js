@@ -1,7 +1,7 @@
 // ── shared.js — state, nav, styles, signal-processing utils ──
 
 // ── Navigation ─────────────────────────────────────────────────
-const PAGES = ['step1.html','step2.html','step3.html','step4.html'];
+const PAGES = ['index.html','step2.html','step3.html','step4.html'];
 
 function goTo(page) { window.location.href = page; }
 function goNext() {
