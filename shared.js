@@ -54,18 +54,19 @@ function injectSharedCSS() {
     }
 
     :root {
-      --bg: #C8D8E4;
+      --bg: #C8D8E4;          /* homepage base */
+      --paper: #FFF6DD;       /* pale yellow overlay */
       --ink: rgba(0,0,0,0.88);
       --muted: rgba(0,0,0,0.55);
       --faint: rgba(0,0,0,0.12);
       --accent: #2EC7FF;
-      --accent-soft: rgba(46,199,255,0.18);
+      --accent2: #E7C86A;
     }
 
     html, body {
       min-height: 100vh;
       font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
-      background: var(--bg);
+      background: linear-gradient(180deg, var(--bg) 0%, var(--paper) 100%);
       color: var(--ink);
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
@@ -80,7 +81,7 @@ function injectSharedCSS() {
       text-decoration: none;
     }
 
-    /* ───────────── Progress Nav ───────────── */
+    /* ───────────── Progress Nav (editorial, thin, minimal) ───────────── */
     .progress-nav {
       display: flex;
       align-items: center;
@@ -93,7 +94,7 @@ function injectSharedCSS() {
       flex-direction: column;
       align-items: center;
       gap: 6px;
-      opacity: 0.35;
+      opacity: 0.4;
       transition: opacity 0.2s ease;
     }
 
@@ -105,26 +106,23 @@ function injectSharedCSS() {
       height: 30px;
       border-radius: 50%;
       border: 1px solid var(--faint);
-      background: rgba(255,255,255,0.5);
-
+      background: rgba(255,255,255,0.6);
       display: flex;
       align-items: center;
       justify-content: center;
-
       font-size: 12px;
       font-weight: 500;
       color: var(--muted);
     }
 
     .step-node.active .step-dot {
-      border-color: var(--accent);
-      color: var(--accent);
-      background: rgba(255,255,255,0.7);
-      box-shadow: 0 0 0 3px var(--accent-soft);
+      border-color: var(--accent2);
+      color: var(--ink);
+      background: rgba(255, 246, 221, 0.8);
     }
 
     .step-node.done .step-dot {
-      color: rgba(0,0,0,0.65);
+      color: rgba(0,0,0,0.6);
     }
 
     .step-lbl {
@@ -132,10 +130,6 @@ function injectSharedCSS() {
       letter-spacing: 0.12em;
       text-transform: uppercase;
       color: var(--muted);
-    }
-
-    .step-node.active .step-lbl {
-      color: var(--ink);
     }
 
     .step-line {
@@ -146,13 +140,14 @@ function injectSharedCSS() {
     }
 
     .step-line.done {
-      background: var(--accent);
+      background: rgba(0,0,0,0.25);
     }
 
-    /* ───────────── Layout (editorial spacing) ───────────── */
+    /* ───────────── Page layout (match homepage spacing) ───────────── */
     .page {
       max-width: 780px;
       margin: 0 auto;
+      padding: 0 0;
     }
 
     .page-header {
@@ -173,7 +168,7 @@ function injectSharedCSS() {
       margin-top: 6px;
     }
 
-    /* ───────────── Cards (thin research style) ───────────── */
+    /* ───────────── Cards (thin editorial boxes) ───────────── */
     .card {
       border-top: 1px solid var(--faint);
       border-bottom: 1px solid var(--faint);
@@ -189,7 +184,7 @@ function injectSharedCSS() {
       margin-bottom: 12px;
     }
 
-    /* ───────────── Buttons (blue accent system) ───────────── */
+    /* ───────────── Buttons (text-first, subtle) ───────────── */
     button {
       font-family: inherit;
       font-size: 12px;
@@ -211,13 +206,8 @@ function injectSharedCSS() {
     }
 
     button.primary {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-      color: var(--ink);
-    }
-
-    button.primary:hover:not(:disabled) {
-      box-shadow: 0 0 0 3px var(--accent-soft);
+      border-color: var(--accent2);
+      background: rgba(231, 200, 106, 0.25);
     }
 
     button.danger {
@@ -232,7 +222,7 @@ function injectSharedCSS() {
       margin-top: 14px;
     }
 
-    /* ───────────── Badges ───────────── */
+    /* ───────────── Badges (quiet, editorial) ───────────── */
     .badge {
       font-size: 11px;
       letter-spacing: 0.08em;
@@ -242,11 +232,11 @@ function injectSharedCSS() {
       color: var(--muted);
     }
 
-    .badge-ok { border-color: var(--accent); color: var(--accent); }
-    .badge-warn { border-color: rgba(0,0,0,0.2); }
-    .badge-err { border-color: rgba(180,0,0,0.3); color: rgba(180,0,0,0.7); }
+    .badge-ok { border-color: rgba(0,100,0,0.3); }
+    .badge-warn { border-color: rgba(160,120,0,0.4); }
+    .badge-err { border-color: rgba(160,0,0,0.3); }
 
-    /* ───────────── Meters (clean signal bars) ───────────── */
+    /* ───────────── Meters (thin journal style) ───────────── */
     .meter {
       margin: 8px 0;
     }
@@ -266,14 +256,14 @@ function injectSharedCSS() {
 
     .meter-fill {
       height: 2px;
-      background: var(--accent);
+      background: var(--ink);
     }
 
     /* ───────────── Text blocks ───────────── */
     .mono {
-      font-family: ui-monospace, Menlo, monospace;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 11px;
-      background: rgba(255,255,255,0.35);
+      background: rgba(255,255,255,0.4);
       padding: 12px;
       border-top: 1px solid var(--faint);
       border-bottom: 1px solid var(--faint);
@@ -284,7 +274,7 @@ function injectSharedCSS() {
       font-size: 15px;
       line-height: 1.6;
       padding: 10px 0;
-      border-left: 2px solid var(--accent);
+      border-left: 2px solid var(--accent2);
       padding-left: 12px;
       margin: 10px 0;
     }
@@ -296,8 +286,14 @@ function injectSharedCSS() {
       border-bottom: 1px solid var(--faint);
     }
 
-    .token-ok { color: var(--accent); }
-    .token-bad { color: rgba(180,0,0,0.7); }
+    /* ───────────── Token styling ───────────── */
+    .token-ok {
+      color: rgba(0,120,0,0.75);
+    }
+
+    .token-bad {
+      color: rgba(160,0,0,0.7);
+    }
 
     /* ───────────── Footer ───────────── */
     .footer-nav {
@@ -306,7 +302,7 @@ function injectSharedCSS() {
       left: 0;
       right: 0;
 
-      background: rgba(200,216,228,0.85);
+      background: rgba(255, 246, 221, 0.85);
       border-top: 1px solid var(--faint);
 
       padding: 12px 24px;
@@ -329,6 +325,7 @@ function injectSharedCSS() {
   `;
 
   document.head.appendChild(style);
+}
 }
 }
 // ── Signal processing utils ────────────────────────────────────
