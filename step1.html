@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Step 1 — Session Challenge</title>
+<script src="shared.js"></script>
+</head>
+<body>
+<script>injectSharedCSS();</script>
+
+<div id="progress-mount"></div>
+
+<div class="page">
+  <div class="page-header">
+    <div class="page-title">Session Challenge</div>
+    <div class="page-sub">Generate a cryptographic session token and a spoken challenge phrase. These bind your voice recording to this specific authentication attempt.</div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">Session token</div>
+    <div class="mono" id="session-display">Click "Generate" to create a new session.</div>
+    <div class="btn-row">
+      <button class="primary" id="btn-gen">Generate challenge</button>
+      <span id="gen-status"></span>
+    </div>
+  </div>
+
+  <div class="card" id="phrase-card" style="display:none">
+    <div class="card-title">Spoken challenge phrase</div>
+    <p style="font-size:13px;color:#888;margin-bottom:8px">You will be asked to read this phrase aloud in the voice step. It proves the recording is live and not replayed.</p>
+    <div class="phrase" id="enroll-phrase">–</div>
+    <p style="font-size:12px;color:#555;margin-top:10px">A different phrase will be used for the verification recording.</p>
+    <div class="phrase" id="verify-phrase" style="border-left-color:#9050d0">–</div>
+    <p style="font-size:12px;color:#555;margin-top:4px">↑ Verify phrase (shown again on step 3)</p>
+  </div>
+
+  <div class="info-box" id="info-box" style="display:none">
+    <strong style="color:#a0b4d0">What happens next</strong><br>
+    The session ID and nonce are stored in your browser session only — nothing is sent to any server. Step 2 simulates device-binding (proof of control). Step 3 captures your voice and runs ECAPA-TDNN speaker embeddings entirely on-device.
+  </div>
+</div>
+
+<div class="footer-nav">
+  <span>Step 1 of 4</span>
+  <button class="primary" id="btn-next" disabled>Next: Device control →</button>
+</div>
+
+<script>
+document.getElementById('progress-mount').innerHTML = renderProgress(1);
+
+const phrases = [
+  "Blue river seven twenty four",
+  "Green mountain ninety one",
+  "What is six plus four",
+  "The quick brown fox jumps",
+  "Autumn leaves fall in November",
+  "Red apple on the table"
+];
+
+document.getElementById('btn-gen').addEventListener('click', () => {
+  const sid = 'SID-' + crypto.randomUUID().slice(0,8).toUpperCase();
+  const nonce = Math.random().toString(36).slice(2,12);
+  const ts = new Date().toISOString();
+  const ep = phrases[Math.floor(Math.random()*phrases.length)];
+  let vp; do { vp = phrases[Math.floor(Math.random()*phrases.length)]; } while(vp===ep);
+
+  State.clear();
+  State.set('sid', sid);
+  State.set('nonce', nonce);
+  State.set('ts', ts);
+  State.set('enrollPhrase', ep);
+  State.set('verifyPhrase', vp);
+
+  document.getElementById('session-display').textContent =
+    `session   ${sid}\nnonce     ${nonce}\ntimestamp ${ts}\n\nenroll phrase  "${ep}"\nverify phrase  "${vp}"`;
+
+  document.getElementById('enroll-phrase').textContent = ep;
+  document.getElementById('verify-phrase').textContent = vp;
+  document.getElementById('phrase-card').style.display = 'block';
+  document.getElementById('info-box').style.display = 'block';
+  document.getElementById('btn-next').disabled = false;
+  document.getElementById('gen-status').innerHTML = '<span class="badge badge-ok">✓ Session created</span>';
+});
+
+document.getElementById('btn-next').addEventListener('click', () => goTo('step2.html'));
+
+// Restore state if returning
+if (State.get('sid')) {
+  const sid=State.get('sid'), nonce=State.get('nonce'), ts=State.get('ts');
+  const ep=State.get('enrollPhrase'), vp=State.get('verifyPhrase');
+  document.getElementById('session-display').textContent =
+    `session   ${sid}\nnonce     ${nonce}\ntimestamp ${ts}\n\nenroll phrase  "${ep}"\nverify phrase  "${vp}"`;
+  document.getElementById('enroll-phrase').textContent = ep;
+  document.getElementById('verify-phrase').textContent = vp;
+  document.getElementById('phrase-card').style.display = 'block';
+  document.getElementById('info-box').style.display = 'block';
+  document.getElementById('btn-next').disabled = false;
+  document.getElementById('gen-status').innerHTML = '<span class="badge badge-ok">✓ Session active</span>';
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Step 4 — Risk Engine</title>
+<script src="shared.js"></script>
+</head>
+<body>
+<script>injectSharedCSS();</script>
+
+<div id="progress-mount"></div>
+
+<div class="page">
+  <div class="page-header">
+    <div class="page-title">Risk Engine</div>
+    <div class="page-sub">Composite risk scoring across all signals collected in steps 1–3. Produces a final allow / step-up review / deny decision.</div>
+  </div>
+
+  <!-- Signal summary -->
+  <div class="card">
+    <div class="card-title">Signal summary</div>
+    <div id="signal-summary"><p class="pend">No signals — complete steps 1–3 first.</p></div>
+  </div>
+
+  <!-- Risk breakdown -->
+  <div class="card" id="risk-card" style="display:none">
+    <div class="card-title">Risk factor breakdown</div>
+    <div id="risk-factors"></div>
+    <div class="sep"></div>
+    <div style="display:flex;align-items:center;gap:20px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:36px;font-weight:700;color:#e8e8f0;line-height:1" id="composite-score">–</div>
+        <div style="font-size:12px;color:#555;margin-top:3px">composite score / 100</div>
+      </div>
+      <div style="flex:1;min-width:180px">
+        <div class="meter-track" style="height:12px"><div class="meter-fill" id="comp-bar" style="width:0%"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#555;margin-top:4px"><span>0 Deny</span><span>65 Step-up</span><span>82 Allow</span></div>
+      </div>
+      <div id="decision-badge"></div>
+    </div>
+
+    <div class="sep"></div>
+    <div id="decision-detail"></div>
+  </div>
+
+  <!-- Weight explanation -->
+  <div class="card" id="weights-card" style="display:none">
+    <div class="card-title">Weight configuration</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px">
+      <div id="w-voice"></div>
+      <div id="w-chal"></div>
+      <div id="w-live"></div>
+      <div id="w-device"></div>
+      <div id="w-beh"></div>
+      <div id="w-geo"></div>
+    </div>
+  </div>
+
+  <!-- Actions -->
+  <div class="card" id="actions-card" style="display:none">
+    <div class="card-title">Actions</div>
+    <div class="btn-row">
+      <button onclick="goTo('step1.html')" class="danger">↺ New session</button>
+      <button onclick="rerun()" class="primary">⟳ Re-evaluate risk</button>
+    </div>
+  </div>
+</div>
+
+<div class="footer-nav">
+  <button onclick="goTo('step3.html')">← Back</button>
+  <span>Step 4 of 4</span>
+  <button class="primary" id="btn-eval">Evaluate risk</button>
+</div>
+
+<script>
+document.getElementById('progress-mount').innerHTML = renderProgress(4);
+
+// ── Weight config ───────────────────────────────────────────────
+const W = { voice:0.30, challengeE:0.10, challengeV:0.10, livenessE:0.075, livenessV:0.075, device:0.20, behavior:0.10, geo:0.05 };
+
+// ── Load signals ────────────────────────────────────────────────
+const signals = {
+  sid:         State.get('sid'),
+  nonce:       State.get('nonce'),
+  ts:          State.get('ts'),
+  ctrlScore:   State.get('ctrlScore'),
+  cosine:      State.get('cosine'),
+  matchPct:    State.get('matchPct'),
+  eChal:       State.get('eChal'),
+  vChal:       State.get('vChal'),
+  eLiveness:   State.get('eLiveness'),
+  vLiveness:   State.get('vLiveness'),
+};
+
+function hasSignals(){return signals.sid && signals.ctrlScore && signals.matchPct !== null;}
+
+function renderSummary(){
+  if(!signals.sid){
+    document.getElementById('signal-summary').innerHTML='<p class="pend">No session. <a href="step1.html" style="color:#378ADD">Start from step 1.</a></p>';
+    return;
+  }
+  const cos=signals.cosine!==null?parseFloat(signals.cosine):null;
+  const cE=signals.eChal!==null?Math.round(signals.eChal*100):null;
+  const cV=signals.vChal!==null?Math.round(signals.vChal*100):null;
+  const lE=signals.eLiveness?Math.round(signals.eLiveness.score*100):null;
+  const lV=signals.vLiveness?Math.round(signals.vLiveness.score*100):null;
+
+  function sig(label,val,unit,ok,warn){
+    const v=val!==null?val+'':'-';
+    const cls=val===null?'badge-neu':val>=ok?'badge-ok':val>=warn?'badge-warn':'badge-err';
+    return `<div style="background:#13131a;border-radius:8px;padding:10px 12px">
+      <div style="font-size:11px;color:#555;margin-bottom:5px;text-transform:uppercase;letter-spacing:.05em">${label}</div>
+      <div style="font-size:16px;font-weight:600;color:#e8e8f0">${v}${unit||''} <span class="badge ${cls}" style="font-size:11px;vertical-align:middle">${val===null?'–':val>=(ok)?'✓ ok':val>=(warn)?'⚠':'✗'}</span></div>
+    </div>`;
+  }
+
+  document.getElementById('signal-summary').innerHTML=`
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:4px">
+      ${sig('Session',signals.sid?100:null,'',100,80)}
+      ${sig('Device control',signals.ctrlScore,'%',90,75)}
+      ${sig('Voice match',signals.matchPct,'%',78,60)}
+      ${sig('Challenge (enroll)',cE,'%',80,50)}
+      ${sig('Challenge (verify)',cV,'%',80,50)}
+      ${sig('Liveness (enroll)',lE,'%',75,50)}
+      ${sig('Liveness (verify)',lV,'%',75,50)}
+    </div>
+    <p style="font-size:12px;color:#555;margin-top:6px">Session: <code>${signals.sid||'–'}</code> · Nonce: <code>${signals.nonce||'–'}</code></p>`;
+
+  if(hasSignals()){
+    document.getElementById('btn-eval').disabled=false;
+  }
+}
+
+renderSummary();
+
+// ── Evaluate ────────────────────────────────────────────────────
+function evaluate(){
+  const vm   = signals.matchPct || 0;
+  const cs   = signals.ctrlScore || 0;
+  const cE   = Math.round((signals.eChal||0)*100);
+  const cV   = Math.round((signals.vChal||0)*100);
+  const lE   = signals.eLiveness ? Math.round(signals.eLiveness.score*100) : 50;
+  const lV   = signals.vLiveness ? Math.round(signals.vLiveness.score*100) : 50;
+  const beh  = 80+Math.floor(Math.random()*20);
+  const geo  = 75+Math.floor(Math.random()*25);
+
+  const tot = Math.round(
+    vm*W.voice + cE*W.challengeE + cV*W.challengeV +
+    lE*W.livenessE + lV*W.livenessV +
+    cs*W.device + beh*W.behavior + geo*W.geo
+  );
+
+  let dec, decCls, decDetail;
+  if(tot>82){
+    dec='Allow'; decCls='badge-ok';
+    decDetail='All signals within acceptable thresholds. Authentication granted. Issue a short-lived session token and proceed.';
+  } else if(tot>65){
+    dec='Step-up review'; decCls='badge-warn';
+    decDetail='One or more signals are marginal. Require an additional factor (SMS OTP, email link, or human review) before granting access.';
+  } else {
+    dec='Deny'; decCls='badge-err';
+    decDetail='Signals fall below minimum thresholds. Authentication denied. Log the attempt and consider account lockout policy.';
+  }
+
+  const color=tot>82?'#1d9e75':tot>65?'#c98a20':'#e24b4a';
+
+  document.getElementById('composite-score').textContent=tot;
+  document.getElementById('comp-bar').style.cssText=`width:${tot}%;background:${color}`;
+  document.getElementById('decision-badge').innerHTML=
+    `<span class="badge ${decCls}" style="font-size:16px;padding:8px 18px">${dec}</span>`;
+  document.getElementById('decision-detail').innerHTML=
+    `<p style="font-size:13px;color:#888;line-height:1.6">${decDetail}</p>`;
+
+  function fRow(label,score,weight,threshold){
+    const pct=Math.round(score);
+    const wPct=Math.round(weight*100);
+    const c=pct>=threshold?'#1d9e75':pct>=(threshold*0.7)?'#c98a20':'#e24b4a';
+    const contribution=Math.round(score*weight);
+    return `<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:0.5px solid #1e1e28">
+      <div style="flex:1.5;font-size:12px;color:#999">${label}</div>
+      <div style="flex:2;min-width:80px">
+        <div class="meter-track" style="height:5px"><div class="meter-fill" style="width:${pct}%;background:${c}"></div></div>
+      </div>
+      <div style="font-size:12px;color:#ccc;width:36px;text-align:right">${pct}%</div>
+      <div style="font-size:11px;color:#555;width:32px;text-align:right">×${wPct}%</div>
+      <div style="font-size:12px;color:#888;width:28px;text-align:right">=${contribution}</div>
+    </div>`;
+  }
+
+  document.getElementById('risk-factors').innerHTML=
+    `<div style="display:flex;gap:10px;padding:0 0 6px;font-size:11px;color:#555;text-transform:uppercase;letter-spacing:.05em">
+      <div style="flex:1.5">Factor</div><div style="flex:2">Score</div>
+      <div style="width:36px;text-align:right">Val</div>
+      <div style="width:32px;text-align:right">Wt</div>
+      <div style="width:28px;text-align:right">Pts</div>
+    </div>`+
+    fRow('Voice match (ECAPA)',vm,W.voice,78)+
+    fRow('Challenge — enroll',cE,W.challengeE,80)+
+    fRow('Challenge — verify',cV,W.challengeV,80)+
+    fRow('Liveness — enroll',lE,W.livenessE,75)+
+    fRow('Liveness — verify',lV,W.livenessV,75)+
+    fRow('Device control',cs,W.device,90)+
+    fRow('Behavior (simulated)',beh,W.behavior,75)+
+    fRow('Geo consistency (sim)',geo,W.geo,75);
+
+  // Weight tiles
+  const wData=[['Voice match',W.voice*100],['Challenge (×2)',W.challengeE*200],['Liveness (×2)',W.livenessE*200],['Device',W.device*100],['Behavior',W.behavior*100],['Geo',W.geo*100]];
+  wData.forEach(([label,pct],i)=>{
+    const ids=['w-voice','w-chal','w-live','w-device','w-beh','w-geo'];
+    document.getElementById(ids[i]).innerHTML=
+      `<div style="background:#13131a;border-radius:8px;padding:10px">
+        <div style="font-size:11px;color:#555;margin-bottom:4px">${label}</div>
+        <div style="font-size:18px;font-weight:600;color:#a0b4d0">${Math.round(pct)}%</div>
+      </div>`;
+  });
+
+  document.getElementById('risk-card').style.display='block';
+  document.getElementById('weights-card').style.display='block';
+  document.getElementById('actions-card').style.display='block';
+}
+
+function rerun(){ evaluate(); }
+
+document.getElementById('btn-eval').addEventListener('click', evaluate);
+document.getElementById('btn-eval').disabled = !hasSignals();
+</script>
+</body>
+</html>
