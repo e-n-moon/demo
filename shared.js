@@ -41,91 +41,309 @@ function renderProgress(currentStep) {
 
 // ── Shared CSS (injected into <head>) ──────────────────────────
 function injectSharedCSS() {
+  if (document.getElementById('shared-css')) return;
+
   const style = document.createElement('style');
+  style.id = 'shared-css';
+
   style.textContent = `
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f0f10;color:#e2e2e5;min-height:100vh;padding:0 0 60px}
-    a{color:inherit;text-decoration:none}
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
 
-    /* Progress nav */
-    .progress-nav{display:flex;align-items:center;justify-content:center;padding:28px 24px 20px;gap:0}
-    .step-node{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;opacity:.45;transition:opacity .2s}
-    .step-node.done{opacity:.7}
-    .step-node.active{opacity:1}
-    .step-dot{width:32px;height:32px;border-radius:50%;border:2px solid #3a3a42;background:#1a1a1f;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:600;color:#888;transition:all .2s}
-    .step-node.done .step-dot{background:#1a3a2a;border-color:#1d9e75;color:#1d9e75}
-    .step-node.active .step-dot{background:#1a2a3a;border-color:#378ADD;color:#378ADD;box-shadow:0 0 0 3px rgba(55,138,221,.18)}
-    .step-lbl{font-size:11px;font-weight:500;color:#888;letter-spacing:.04em;text-transform:uppercase}
-    .step-node.active .step-lbl{color:#ccc}
-    .step-line{flex:1;height:2px;background:#2a2a32;min-width:24px;max-width:80px;transition:background .2s}
-    .step-line.done{background:#1d9e75}
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+        "SF Pro Text", "Segoe UI", sans-serif;
 
-    /* Page shell */
-    .page{max-width:780px;margin:0 auto;padding:0 20px}
-    .page-header{padding:8px 0 28px}
-    .page-title{font-size:22px;font-weight:600;color:#f0f0f3;margin-bottom:6px}
-    .page-sub{font-size:14px;color:#888;line-height:1.5}
+      background: linear-gradient(180deg, #fff9e6 0%, #fffdf6 100%);
+      color: #1d1d1f;
+      min-height: 100vh;
+      padding: 0 0 80px;
+    }
 
-    /* Cards */
-    .card{background:#1a1a1f;border:0.5px solid #2e2e38;border-radius:14px;padding:22px;margin-bottom:16px}
-    .card-title{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#666;margin-bottom:14px}
+    a {
+      color: inherit;
+      text-decoration: none;
+    }
 
-    /* Buttons */
-    button{cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;padding:9px 18px;border-radius:8px;border:0.5px solid #3a3a42;background:#22222a;color:#ddd;transition:all .15s;display:inline-flex;align-items:center;gap:7px}
-    button:hover:not(:disabled){background:#2a2a35;border-color:#4a4a58;color:#fff}
-    button:disabled{opacity:.35;cursor:not-allowed}
-    button.primary{background:#1a2a3a;border-color:#378ADD;color:#6cb8f5}
-    button.primary:hover:not(:disabled){background:#1e3248;color:#8ecfff}
-    button.danger{background:#2a1a1a;border-color:#7a2a2a;color:#f08080}
-    .btn-row{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;align-items:center}
+    /* ───────────── Progress Nav (Apple-style minimal) ───────────── */
+    .progress-nav {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 26px 20px 18px;
+      gap: 0;
+    }
 
-    /* Status badges */
-    .badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 10px;border-radius:20px;font-weight:500}
-    .badge-ok{background:#0d2a1e;color:#1d9e75;border:0.5px solid #1d9e75}
-    .badge-warn{background:#2a1e08;color:#c98a20;border:0.5px solid #c98a20}
-    .badge-err{background:#2a0d0d;color:#e24b4a;border:0.5px solid #e24b4a}
-    .badge-info{background:#0d1a2a;color:#378ADD;border:0.5px solid #378ADD}
-    .badge-neu{background:#1e1e26;color:#888;border:0.5px solid #3a3a42}
+    .step-node {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      opacity: 0.45;
+      transition: all 0.2s ease;
+    }
 
-    /* Meters */
-    .meter{margin:7px 0}
-    .meter-lbl{display:flex;justify-content:space-between;font-size:12px;color:#888;margin-bottom:4px}
-    .meter-track{height:6px;background:#23232d;border-radius:3px;overflow:hidden}
-    .meter-fill{height:100%;border-radius:3px;transition:width .5s ease}
+    .step-node.done { opacity: 0.75; }
+    .step-node.active { opacity: 1; }
 
-    /* Mono / code */
-    .mono{font-family:'SF Mono',Menlo,Consolas,monospace;font-size:11px;color:#9090a8;background:#13131a;border-radius:8px;padding:12px;line-height:1.7;white-space:pre-wrap;word-break:break-all}
-    code{font-family:'SF Mono',Menlo,Consolas,monospace;font-size:11px;background:#23232d;padding:2px 6px;border-radius:4px;color:#a0b4d0}
+    .step-dot {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.7);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
 
-    /* Canvas waveform */
-    canvas.wave{display:block;width:100%;height:60px;background:#13131a;border-radius:8px;margin:8px 0}
+      display: flex;
+      align-items: center;
+      justify-content: center;
 
-    /* Phrase display */
-    .phrase{font-size:16px;font-weight:500;color:#e8e8f0;background:#13131a;border-radius:8px;padding:12px 16px;margin:10px 0;border-left:3px solid #378ADD;line-height:1.5}
+      font-size: 13px;
+      font-weight: 600;
+      color: #444;
+      backdrop-filter: blur(10px);
+    }
 
-    /* Token diff */
-    .token-ok{display:inline-block;padding:1px 5px;border-radius:4px;background:#0d2a1e;color:#1d9e75;font-family:monospace;font-size:12px;margin:1px}
-    .token-bad{display:inline-block;padding:1px 5px;border-radius:4px;background:#2a0d0d;color:#e24b4a;font-family:monospace;font-size:12px;margin:1px}
-    .transcript-box{background:#13131a;border-radius:8px;padding:10px 14px;font-size:13px;line-height:1.8;min-height:36px;margin:6px 0}
+    .step-node.active .step-dot {
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid rgba(255, 204, 102, 0.6);
+      box-shadow: 0 6px 18px rgba(255, 200, 80, 0.25);
+      color: #b7791f;
+    }
 
-    /* Embed heatmap */
-    .eviz{display:grid;grid-template-columns:repeat(32,1fr);gap:2px;margin:6px 0}
-    .eviz div{height:13px;border-radius:1px}
+    .step-node.done .step-dot {
+      color: #6b8f3a;
+    }
 
-    /* Nav footer */
-    .footer-nav{position:fixed;bottom:0;left:0;right:0;background:#0f0f10;border-top:0.5px solid #2e2e38;padding:12px 24px;display:flex;justify-content:space-between;align-items:center;z-index:100}
-    .footer-nav span{font-size:12px;color:#555}
+    .step-lbl {
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #777;
+    }
 
-    /* Misc */
-    .sep{border-top:0.5px solid #2e2e38;margin:16px 0;padding-top:16px}
-    .row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-    .col2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    .pend{color:#555;font-size:13px;font-style:italic}
-    .rdot{width:7px;height:7px;border-radius:50%;background:#e24b4a;display:inline-block;animation:bl 1s infinite}
-    @keyframes bl{0%,100%{opacity:1}50%{opacity:.2}}
-    .info-box{background:#0d1a2a;border:0.5px solid #1a3050;border-radius:8px;padding:12px 14px;font-size:12px;color:#7090b0;line-height:1.7;margin-top:10px}
-    @media(max-width:540px){.col2{grid-template-columns:1fr}.footer-nav{padding:10px 14px}}
+    .step-node.active .step-lbl {
+      color: #333;
+    }
+
+    .step-line {
+      flex: 1;
+      height: 1px;
+      background: rgba(0,0,0,0.08);
+      min-width: 24px;
+      max-width: 80px;
+    }
+
+    .step-line.done {
+      background: rgba(255, 200, 80, 0.6);
+    }
+
+    /* ───────────── Page Layout ───────────── */
+    .page {
+      max-width: 780px;
+      margin: 0 auto;
+      padding: 0 22px;
+    }
+
+    .page-header {
+      padding: 10px 0 26px;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 600;
+      color: #1d1d1f;
+      letter-spacing: -0.01em;
+    }
+
+    .page-sub {
+      font-size: 14px;
+      color: #666;
+      line-height: 1.5;
+      margin-top: 6px;
+    }
+
+    /* ───────────── Cards (soft Apple glass) ───────────── */
+    .card {
+      background: rgba(255, 255, 255, 0.75);
+      border: 1px solid rgba(0,0,0,0.06);
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 16px;
+
+      box-shadow: 0 8px 24px rgba(0,0,0,0.04);
+      backdrop-filter: blur(14px);
+    }
+
+    .card-title {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #888;
+      margin-bottom: 14px;
+    }
+
+    /* ───────────── Buttons (Apple-like pill softness) ───────────── */
+    button {
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 500;
+
+      padding: 9px 16px;
+      border-radius: 10px;
+
+      border: 1px solid rgba(0,0,0,0.08);
+      background: rgba(255,255,255,0.7);
+      color: #333;
+
+      transition: all 0.15s ease;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+      background: rgba(255,255,255,0.95);
+    }
+
+    button:disabled {
+      opacity: 0.4;
+    }
+
+    button.primary {
+      background: linear-gradient(180deg, #ffe9b3, #ffd36b);
+      border: 1px solid rgba(255, 200, 80, 0.6);
+      color: #5a3b00;
+    }
+
+    button.primary:hover:not(:disabled) {
+      box-shadow: 0 10px 22px rgba(255, 200, 80, 0.25);
+    }
+
+    button.danger {
+      background: #fff1f1;
+      border: 1px solid #f3b3b3;
+      color: #b42323;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    /* ───────────── Badges (soft pastel system) ───────────── */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(0,0,0,0.06);
+    }
+
+    .badge-ok { background: #ecf7ee; color: #2f7d46; }
+    .badge-warn { background: #fff6e5; color: #9a6b00; }
+    .badge-err { background: #fdecec; color: #b42323; }
+    .badge-info { background: #eef5ff; color: #2b5fb3; }
+    .badge-neu { background: #f4f4f5; color: #666; }
+
+    /* ───────────── Inputs / code / misc ───────────── */
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      background: rgba(255,255,255,0.6);
+      border: 1px solid rgba(0,0,0,0.06);
+      border-radius: 10px;
+      padding: 12px;
+      line-height: 1.6;
+    }
+
+    code {
+      font-family: ui-monospace, Menlo, monospace;
+      font-size: 11px;
+      background: rgba(255, 214, 102, 0.25);
+      padding: 2px 6px;
+      border-radius: 6px;
+      color: #6b4a00;
+    }
+
+    canvas.wave {
+      display: block;
+      width: 100%;
+      height: 60px;
+      background: rgba(255,255,255,0.6);
+      border-radius: 12px;
+    }
+
+    .phrase {
+      font-size: 16px;
+      font-weight: 500;
+      background: rgba(255,255,255,0.65);
+      border-left: 3px solid #ffd36b;
+      padding: 12px 14px;
+      border-radius: 10px;
+    }
+
+    .transcript-box {
+      background: rgba(255,255,255,0.6);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+    }
+
+    .token-ok {
+      background: #e9f7ec;
+      color: #2f7d46;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: monospace;
+    }
+
+    .token-bad {
+      background: #fdecec;
+      color: #b42323;
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-family: monospace;
+    }
+
+    /* Footer */
+    .footer-nav {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+
+      background: rgba(255, 253, 246, 0.9);
+      border-top: 1px solid rgba(0,0,0,0.06);
+
+      backdrop-filter: blur(12px);
+      padding: 12px 22px;
+
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .footer-nav span {
+      font-size: 12px;
+      color: #777;
+    }
+
+    @media (max-width: 540px) {
+      .page { padding: 0 14px; }
+    }
   `;
+
   document.head.appendChild(style);
 }
 
