@@ -47,22 +47,33 @@ function injectSharedCSS() {
   style.id = 'shared-css';
 
   style.textContent = `
-    * {
-      box-sizing: border-box;
+    *, *::before, *::after {
       margin: 0;
       padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --bg: #C8D8E4;          /* homepage base */
+      --paper: #FFF6DD;       /* pale yellow overlay */
+      --ink: rgba(0,0,0,0.88);
+      --muted: rgba(0,0,0,0.55);
+      --faint: rgba(0,0,0,0.12);
+      --accent: #2EC7FF;
+      --accent2: #E7C86A;
+    }
+
+    html, body {
+      min-height: 100vh;
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+      background: linear-gradient(180deg, var(--bg) 0%, var(--paper) 100%);
+      color: var(--ink);
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
 
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
-        "SF Pro Text", "Segoe UI", sans-serif;
-
-      background: linear-gradient(180deg, #fff9e6 0%, #fffdf6 100%);
-      color: #1d1d1f;
-      min-height: 100vh;
-      padding: 0 0 80px;
+      padding: 80px 24px 80px;
     }
 
     a {
@@ -70,13 +81,12 @@ function injectSharedCSS() {
       text-decoration: none;
     }
 
-    /* ───────────── Progress Nav (Apple-style minimal) ───────────── */
+    /* ───────────── Progress Nav (editorial, thin, minimal) ───────────── */
     .progress-nav {
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 26px 20px 18px;
-      gap: 0;
+      padding: 28px 0 18px;
     }
 
     .step-node {
@@ -84,152 +94,125 @@ function injectSharedCSS() {
       flex-direction: column;
       align-items: center;
       gap: 6px;
-      cursor: pointer;
-      opacity: 0.45;
-      transition: all 0.2s ease;
+      opacity: 0.4;
+      transition: opacity 0.2s ease;
     }
 
-    .step-node.done { opacity: 0.75; }
     .step-node.active { opacity: 1; }
+    .step-node.done { opacity: 0.65; }
 
     .step-dot {
-      width: 34px;
-      height: 34px;
+      width: 30px;
+      height: 30px;
       border-radius: 50%;
-      background: rgba(255, 255, 255, 0.7);
-      border: 1px solid rgba(0, 0, 0, 0.08);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-
+      border: 1px solid var(--faint);
+      background: rgba(255,255,255,0.6);
       display: flex;
       align-items: center;
       justify-content: center;
-
-      font-size: 13px;
-      font-weight: 600;
-      color: #444;
-      backdrop-filter: blur(10px);
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
     }
 
     .step-node.active .step-dot {
-      background: rgba(255, 255, 255, 0.95);
-      border: 1px solid rgba(255, 204, 102, 0.6);
-      box-shadow: 0 6px 18px rgba(255, 200, 80, 0.25);
-      color: #b7791f;
+      border-color: var(--accent2);
+      color: var(--ink);
+      background: rgba(255, 246, 221, 0.8);
     }
 
     .step-node.done .step-dot {
-      color: #6b8f3a;
+      color: rgba(0,0,0,0.6);
     }
 
     .step-lbl {
-      font-size: 11px;
-      letter-spacing: 0.06em;
+      font-size: 10px;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: #777;
-    }
-
-    .step-node.active .step-lbl {
-      color: #333;
+      color: var(--muted);
     }
 
     .step-line {
-      flex: 1;
+      width: 64px;
       height: 1px;
-      background: rgba(0,0,0,0.08);
-      min-width: 24px;
-      max-width: 80px;
+      background: var(--faint);
+      margin: 0 6px;
     }
 
     .step-line.done {
-      background: rgba(255, 200, 80, 0.6);
+      background: rgba(0,0,0,0.25);
     }
 
-    /* ───────────── Page Layout ───────────── */
+    /* ───────────── Page layout (match homepage spacing) ───────────── */
     .page {
       max-width: 780px;
       margin: 0 auto;
-      padding: 0 22px;
+      padding: 0 0;
     }
 
     .page-header {
-      padding: 10px 0 26px;
+      padding: 10px 0 28px;
     }
 
     .page-title {
-      font-size: 24px;
-      font-weight: 600;
-      color: #1d1d1f;
-      letter-spacing: -0.01em;
+      font-size: 20px;
+      font-weight: 500;
+      letter-spacing: 0.01em;
+      color: var(--ink);
     }
 
     .page-sub {
       font-size: 14px;
-      color: #666;
-      line-height: 1.5;
+      line-height: 1.7;
+      color: var(--muted);
       margin-top: 6px;
     }
 
-    /* ───────────── Cards (soft Apple glass) ───────────── */
+    /* ───────────── Cards (thin editorial boxes) ───────────── */
     .card {
-      background: rgba(255, 255, 255, 0.75);
-      border: 1px solid rgba(0,0,0,0.06);
-      border-radius: 16px;
-      padding: 20px;
-      margin-bottom: 16px;
-
-      box-shadow: 0 8px 24px rgba(0,0,0,0.04);
-      backdrop-filter: blur(14px);
+      border-top: 1px solid var(--faint);
+      border-bottom: 1px solid var(--faint);
+      padding: 18px 0;
+      margin-bottom: 18px;
     }
 
     .card-title {
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    /* ───────────── Buttons (text-first, subtle) ───────────── */
+    button {
+      font-family: inherit;
       font-size: 12px;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: #888;
-      margin-bottom: 14px;
-    }
 
-    /* ───────────── Buttons (Apple-like pill softness) ───────────── */
-    button {
+      padding: 8px 14px;
+      border: 1px solid var(--faint);
+      background: rgba(255,255,255,0.5);
+      color: var(--ink);
+
       cursor: pointer;
-      font-family: inherit;
-      font-size: 13px;
-      font-weight: 500;
-
-      padding: 9px 16px;
-      border-radius: 10px;
-
-      border: 1px solid rgba(0,0,0,0.08);
-      background: rgba(255,255,255,0.7);
-      color: #333;
-
       transition: all 0.15s ease;
     }
 
     button:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: 0 6px 16px rgba(0,0,0,0.06);
-      background: rgba(255,255,255,0.95);
-    }
-
-    button:disabled {
-      opacity: 0.4;
+      border-color: var(--accent);
+      color: var(--accent);
     }
 
     button.primary {
-      background: linear-gradient(180deg, #ffe9b3, #ffd36b);
-      border: 1px solid rgba(255, 200, 80, 0.6);
-      color: #5a3b00;
-    }
-
-    button.primary:hover:not(:disabled) {
-      box-shadow: 0 10px 22px rgba(255, 200, 80, 0.25);
+      border-color: var(--accent2);
+      background: rgba(231, 200, 106, 0.25);
     }
 
     button.danger {
-      background: #fff1f1;
-      border: 1px solid #f3b3b3;
-      color: #b42323;
+      border-color: rgba(180,0,0,0.3);
+      color: rgba(180,0,0,0.7);
     }
 
     .btn-row {
@@ -239,114 +222,110 @@ function injectSharedCSS() {
       margin-top: 14px;
     }
 
-    /* ───────────── Badges (soft pastel system) ───────────── */
+    /* ───────────── Badges (quiet, editorial) ───────────── */
     .badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 12px;
-      padding: 3px 10px;
-      border-radius: 999px;
-      border: 1px solid rgba(0,0,0,0.06);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 8px;
+      border: 1px solid var(--faint);
+      color: var(--muted);
     }
 
-    .badge-ok { background: #ecf7ee; color: #2f7d46; }
-    .badge-warn { background: #fff6e5; color: #9a6b00; }
-    .badge-err { background: #fdecec; color: #b42323; }
-    .badge-info { background: #eef5ff; color: #2b5fb3; }
-    .badge-neu { background: #f4f4f5; color: #666; }
+    .badge-ok { border-color: rgba(0,100,0,0.3); }
+    .badge-warn { border-color: rgba(160,120,0,0.4); }
+    .badge-err { border-color: rgba(160,0,0,0.3); }
 
-    /* ───────────── Inputs / code / misc ───────────── */
+    /* ───────────── Meters (thin journal style) ───────────── */
+    .meter {
+      margin: 8px 0;
+    }
+
+    .meter-lbl {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .meter-track {
+      height: 2px;
+      background: var(--faint);
+    }
+
+    .meter-fill {
+      height: 2px;
+      background: var(--ink);
+    }
+
+    /* ───────────── Text blocks ───────────── */
     .mono {
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 11px;
-      background: rgba(255,255,255,0.6);
-      border: 1px solid rgba(0,0,0,0.06);
-      border-radius: 10px;
+      background: rgba(255,255,255,0.4);
       padding: 12px;
-      line-height: 1.6;
-    }
-
-    code {
-      font-family: ui-monospace, Menlo, monospace;
-      font-size: 11px;
-      background: rgba(255, 214, 102, 0.25);
-      padding: 2px 6px;
-      border-radius: 6px;
-      color: #6b4a00;
-    }
-
-    canvas.wave {
-      display: block;
-      width: 100%;
-      height: 60px;
-      background: rgba(255,255,255,0.6);
-      border-radius: 12px;
+      border-top: 1px solid var(--faint);
+      border-bottom: 1px solid var(--faint);
+      white-space: pre-wrap;
     }
 
     .phrase {
-      font-size: 16px;
-      font-weight: 500;
-      background: rgba(255,255,255,0.65);
-      border-left: 3px solid #ffd36b;
-      padding: 12px 14px;
-      border-radius: 10px;
+      font-size: 15px;
+      line-height: 1.6;
+      padding: 10px 0;
+      border-left: 2px solid var(--accent2);
+      padding-left: 12px;
+      margin: 10px 0;
     }
 
     .transcript-box {
-      background: rgba(255,255,255,0.6);
-      border-radius: 10px;
-      padding: 10px 12px;
       font-size: 13px;
+      padding: 10px 0;
+      border-top: 1px solid var(--faint);
+      border-bottom: 1px solid var(--faint);
     }
 
+    /* ───────────── Token styling ───────────── */
     .token-ok {
-      background: #e9f7ec;
-      color: #2f7d46;
-      border-radius: 4px;
-      padding: 1px 5px;
-      font-family: monospace;
+      color: rgba(0,120,0,0.75);
     }
 
     .token-bad {
-      background: #fdecec;
-      color: #b42323;
-      border-radius: 4px;
-      padding: 1px 5px;
-      font-family: monospace;
+      color: rgba(160,0,0,0.7);
     }
 
-    /* Footer */
+    /* ───────────── Footer ───────────── */
     .footer-nav {
       position: fixed;
       bottom: 0;
       left: 0;
       right: 0;
 
-      background: rgba(255, 253, 246, 0.9);
-      border-top: 1px solid rgba(0,0,0,0.06);
+      background: rgba(255, 246, 221, 0.85);
+      border-top: 1px solid var(--faint);
 
-      backdrop-filter: blur(12px);
-      padding: 12px 22px;
-
+      padding: 12px 24px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
 
     .footer-nav span {
-      font-size: 12px;
-      color: #777;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
     }
 
+    /* ───────────── Responsive ───────────── */
     @media (max-width: 540px) {
-      .page { padding: 0 14px; }
+      body { padding: 70px 14px 80px; }
     }
   `;
 
   document.head.appendChild(style);
 }
-
 // ── Signal processing utils ────────────────────────────────────
 function rfft(x) {
   const N=x.length, re=new Float32Array(x), im=new Float32Array(N);
