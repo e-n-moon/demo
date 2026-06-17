@@ -4,59 +4,72 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Step 2 — Device Control</title>
+
 <script src="shared.js"></script>
 </head>
+
 <body>
 <script>injectSharedCSS();</script>
 
 <div id="progress-mount"></div>
 
 <div class="page">
+
   <div class="page-header">
     <div class="page-title">Device Control</div>
-    <div class="page-sub">Proof that the authentication attempt originates from a bound, trusted device. In production this uses a hardware-backed key (TPM / Secure Enclave / WebAuthn) to sign the session nonce.</div>
+    <div class="page-sub">
+      Device binding simulation (WebAuthn-style proof of possession)
+    </div>
   </div>
 
-  <div class="card" id="session-summary">
+  <!-- SESSION -->
+  <div class="card">
     <div class="card-title">Active session</div>
-    <div class="mono" id="session-box">No session — <a href="index.html" style="color:#378ADD">go to step 1</a></div>
+    <div class="mono" id="session-box">–</div>
   </div>
 
+  <!-- DEVICE -->
   <div class="card">
     <div class="card-title">Device binding</div>
-    <div id="device-state">
-      <p style="font-size:13px;color:#888;margin-bottom:14px">This simulates WebAuthn / platform authenticator proof-of-possession. The device signs the session nonce with a hardware-backed private key; the server verifies with the paired public key.</p>
-      <div class="row" style="gap:12px;flex-wrap:wrap">
-        <div style="flex:1;min-width:160px;background:#13131a;border-radius:8px;padding:12px">
-          <div style="font-size:11px;color:#555;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Device ID</div>
-          <div class="mono" style="background:none;padding:0;font-size:12px" id="device-id">–</div>
+
+    <div class="info-box">
+      This simulates a hardware-backed authenticator signing a session nonce.
+    </div>
+
+    <div class="row" style="margin-top:12px">
+      <div style="flex:1;min-width:220px;background:#13131a;border-radius:10px;padding:12px">
+        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.05em">
+          Device ID
         </div>
-        <div style="flex:1;min-width:160px;background:#13131a;border-radius:8px;padding:12px">
-          <div style="font-size:11px;color:#555;margin-bottom:4px;text-transform:uppercase;letter-spacing:.05em">Signature</div>
-          <div class="mono" style="background:none;padding:0;font-size:12px" id="sig-display">–</div>
+        <div class="mono" id="device-id">–</div>
+      </div>
+
+      <div style="flex:1;min-width:220px;background:#13131a;border-radius:10px;padding:12px">
+        <div style="font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.05em">
+          Signature
         </div>
+        <div class="mono" id="sig-display">–</div>
       </div>
     </div>
 
     <div class="btn-row">
-      <button class="primary" id="btn-verify" disabled>Verify device</button>
+      <button class="primary" id="btn-verify" disabled>
+        Verify device
+      </button>
+
       <span id="verify-status"></span>
     </div>
 
-    <div id="score-area" style="display:none;margin-top:16px">
-      <div class="sep" style="margin-top:0"></div>
+    <div id="score-area" style="display:none">
+      <div class="sep"></div>
       <div id="score-meters"></div>
     </div>
   </div>
 
-  <div class="info-box">
-    <strong style="color:#a0b4d0">Production implementation</strong><br>
-    Use <code>navigator.credentials.create()</code> (WebAuthn) with <code>authenticatorAttachment: "platform"</code> to bind to the device's Secure Enclave / TPM. The signed assertion includes the session nonce as the challenge, preventing replay across sessions.
-  </div>
 </div>
 
 <div class="footer-nav">
-  <button id="btn-back" onclick="goTo('index.html')">← Back</button>
+  <button onclick="goTo('step1.html')">← Back</button>
   <span>Step 2 of 4</span>
   <button class="primary" id="btn-next" disabled>Next: Voice →</button>
 </div>
@@ -64,63 +77,106 @@
 <script>
 document.getElementById('progress-mount').innerHTML = renderProgress(2);
 
+// ─────────────────────────────
+// SESSION CHECK (CRITICAL)
+// ─────────────────────────────
 const sid = State.get('sid');
+
 if (!sid) {
-  document.getElementById('session-box').innerHTML = 'No session — <a href="step1.html" style="color:#378ADD">go to step 1</a>';
+  document.getElementById('session-box').innerHTML =
+    'No session — go back to Step 1';
 } else {
   document.getElementById('session-box').textContent =
-    `session  ${sid}\nnonce    ${State.get('nonce')}\ntime     ${State.get('ts')}`;
-  document.getElementById('btn-verify').disabled = false;
+    `session: ${sid}`;
 
-  // Stable device fingerprint from browser properties
-  const fpRaw = [navigator.userAgent, navigator.language, screen.width+'x'+screen.height, navigator.hardwareConcurrency].join('|');
-  let hash = 0;
-  for(let i=0;i<fpRaw.length;i++){hash=((hash<<5)-hash)+fpRaw.charCodeAt(i);hash|=0;}
-  const deviceId = 'DEV-' + Math.abs(hash).toString(16).padStart(8,'0').toUpperCase();
-  document.getElementById('device-id').textContent = deviceId;
-  State.set('deviceId', deviceId);
+  document.getElementById('btn-verify').disabled = false;
 }
 
-// Restore if already done
-if (State.get('ctrlScore')) {
-  showResult(State.get('ctrlScore'), State.get('sigDisplay'));
+// ─────────────────────────────
+// DEVICE FINGERPRINT
+// ─────────────────────────────
+const fpRaw = [
+  navigator.userAgent,
+  navigator.language,
+  screen.width + 'x' + screen.height,
+  navigator.hardwareConcurrency
+].join('|');
+
+let hash = 0;
+for (let i = 0; i < fpRaw.length; i++) {
+  hash = ((hash << 5) - hash) + fpRaw.charCodeAt(i);
+  hash |= 0;
+}
+
+const deviceId = 'DEV-' + Math.abs(hash).toString(16).padStart(8,'0').toUpperCase();
+
+document.getElementById('device-id').textContent = deviceId;
+State.set('deviceId', deviceId);
+
+// ─────────────────────────────
+// RESTORE STATE (FIXED)
+// ─────────────────────────────
+if (State.get('deviceVerified')) {
+  showResult(
+    State.get('ctrlScore') || 95,
+    State.get('sigDisplay') || ''
+  );
   document.getElementById('btn-next').disabled = false;
 }
 
+// ─────────────────────────────
+// VERIFY FLOW
+// ─────────────────────────────
 document.getElementById('btn-verify').addEventListener('click', async () => {
   const btn = document.getElementById('btn-verify');
-  btn.disabled = true;
-  document.getElementById('verify-status').innerHTML = '<span class="badge badge-info">⏳ Signing nonce…</span>';
 
-  // Simulate async hardware signing (~300-600ms)
-  await new Promise(r=>setTimeout(r, 300+Math.random()*300));
+  btn.disabled = true;
+  document.getElementById('verify-status').innerHTML =
+    '<span class="badge badge-info">Signing nonce...</span>';
+
+  await new Promise(r => setTimeout(r, 400 + Math.random() * 400));
 
   const nonce = State.get('nonce');
-  // Deterministic pseudo-signature from nonce + device
-  let sig = '';
-  for(let i=0;i<nonce.length;i++) sig += (nonce.charCodeAt(i)^(i*17)).toString(16).padStart(2,'0');
-  const sigShort = sig.slice(0,24).toUpperCase();
 
-  const score = 90 + Math.floor(Math.random()*10);
+  let sig = '';
+  for (let i = 0; i < nonce.length; i++) {
+    sig += (nonce.charCodeAt(i) ^ (i * 17)).toString(16).padStart(2,'0');
+  }
+
+  const sigShort = sig.slice(0, 24).toUpperCase();
+
+  const score = 88 + Math.floor(Math.random() * 12);
+
+  // ── IMPORTANT: SINGLE SOURCE OF TRUTH ──
   State.set('ctrlScore', score);
   State.set('sigDisplay', sigShort);
+  State.set('deviceVerified', true);
 
   document.getElementById('sig-display').textContent = sigShort + '…';
+
   showResult(score, sigShort);
+
   document.getElementById('btn-next').disabled = false;
 });
 
+// ─────────────────────────────
+// RESULT UI
+// ─────────────────────────────
 function showResult(score, sig) {
-  document.getElementById('verify-status').innerHTML = '<span class="badge badge-ok">✓ Device verified</span>';
+  document.getElementById('verify-status').innerHTML =
+    '<span class="badge badge-ok">✓ Device verified</span>';
+
   document.getElementById('score-area').style.display = 'block';
+
   document.getElementById('score-meters').innerHTML =
     meterHTML('Device binding score', score) +
     meterHTML('Nonce signature valid', 100, '#1d9e75') +
     meterHTML('Session freshness', 97, '#1d9e75');
-  document.getElementById('btn-next').disabled = false;
 }
 
-document.getElementById('btn-next').addEventListener('click', () => goTo('step3.html'));
+document.getElementById('btn-next').onclick =
+  () => goTo('step3.html');
 </script>
+
 </body>
 </html>
