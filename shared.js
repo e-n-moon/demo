@@ -1,11 +1,4 @@
 // ── shared.js — state, nav, styles, signal-processing utils ──
-.wave {
-  width: 100%;
-  height: 80px;
-  background: #111;
-  border-radius: 8px;
-  margin-top: 10px;
-}
 
 // ── Navigation ─────────────────────────────────────────────────
 const PAGES = ['index.html','step2.html','step3.html','step4.html'];
