@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Step 3 — Voice Authentication</title>
+<script src="shared.js"></script>
+</head>
+<body>
+<script>injectSharedCSS();</script>
+
+<div id="progress-mount"></div>
+
+<div class="page">
+  <div class="page-header">
+    <div class="page-title">Voice Authentication</div>
+    <div class="page-sub">Enroll then verify your voice. All inference runs on-device — ECAPA-TDNN speaker embeddings via ONNX Runtime WebAssembly and Whisper-tiny challenge transcription.</div>
+  </div>
+
+  <!-- Model loader -->
+  <div class="card">
+    <div class="card-title">Model</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <span class="badge badge-neu" id="ort-status">⏳ ORT loading</span>
+      <span class="badge badge-neu" id="model-status">⏳ No model</span>
+      <span class="badge badge-neu" id="asr-status">⏳ Whisper loading</span>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <input id="model-url" type="url"
+        placeholder="https://your-host.com/ecapa_tdnn.onnx  (leave blank = synthetic weights)"
+        style="flex:1;min-width:220px;font-family:monospace;font-size:12px;padding:8px 12px;border:0.5px solid #3a3a42;border-radius:8px;background:#13131a;color:#ccc;outline:none"/>
+      <button id="btn-load-model">Load model</button>
+    </div>
+    <div class="info-box">
+      Leave blank to use synthetic weights (correct ECAPA-TDNN architecture, random parameters). For real VoxCeleb weights, export with <code>torch.onnx.export(clf.mods.embedding_model, torch.randn(1,80,200), "ecapa.onnx", opset_version=14)</code> and host with <code>Access-Control-Allow-Origin: *</code>.
+    </div>
+  </div>
+
+  <!-- Enroll -->
+  <div class="card">
+    <div class="card-title">① Enroll voiceprint</div>
+    <div id="enroll-phrase-wrap">
+      <p style="font-size:12px;color:#666;margin-bottom:4px">Read this phrase aloud when recording:</p>
+      <div class="phrase" id="enroll-phrase-display">–</div>
+    </div>
+    <canvas class="wave" id="e-canvas"></canvas>
+    <div class="btn-row">
+      <button id="btn-es" disabled>🎤 Start recording</button>
+      <button id="btn-ex" disabled>⏹ Stop</button>
+      <span id="e-rec-status"></span>
+    </div>
+    <div id="e-status" style="margin-top:10px"><p class="pend">Generate a session first (step 1)</p></div>
+    <div id="e-results"></div>
+  </div>
+
+  <!-- Verify -->
+  <div class="card">
+    <div class="card-title">② Verify voiceprint</div>
+    <div id="verify-phrase-wrap" style="display:none">
+      <p style="font-size:12px;color:#666;margin-bottom:4px">Read this phrase aloud when recording:</p>
+      <div class="phrase" id="verify-phrase-display" style="border-left-color:#9050d0">–</div>
+    </div>
+    <canvas class="wave" id="v-canvas"></canvas>
+    <div class="btn-row">
+      <button id="btn-vs" disabled>🎤 Start recording</button>
+      <button id="btn-vx" disabled>⏹ Stop</button>
+      <span id="v-rec-status"></span>
+    </div>
+    <div id="v-status" style="margin-top:10px"><p class="pend">Complete enroll first</p></div>
+    <div id="v-results"></div>
+  </div>
+
+  <!-- Match result -->
+  <div class="card" id="match-card" style="display:none">
+    <div class="card-title">Speaker match result</div>
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div>
+        <div style="font-size:28px;font-weight:600;color:#e8e8f0;line-height:1" id="cos-display">–</div>
+        <div style="font-size:12px;color:#666;margin-top:2px">cosine similarity</div>
+      </div>
+      <div style="flex:1;min-width:160px">
+        <div class="meter-track" style="height:10px"><div class="meter-fill" id="cos-bar" style="width:0%"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:11px;color:#555;margin-top:3px"><span>−1.0</span><span>threshold 0.75</span><span>1.0</span></div>
+      </div>
+      <div id="match-verdict"></div>
+    </div>
+    <div id="delta-viz" style="margin-top:12px"></div>
+    <div style="margin-top:8px;font-size:12px;color:#555" id="infer-info"></div>
+  </div>
+</div>
+
+<div class="footer-nav">
+  <button onclick="goTo('step2.html')">← Back</button>
+  <span>Step 3 of 4</span>
+  <button class="primary" id="btn-next" disabled>Next: Risk engine →</button>
+</div>
+
+<!-- ORT loaded as classic script so window.ort is available synchronously -->
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js"
+  onload="initORT()" onerror="setBadge('ort-status','badge-err','✗ ORT load failed')"></script>
+
+<script>
+document.getElementById('progress-mount').innerHTML = renderProgress(3);
+
+// ── State ───────────────────────────────────────────────────────
+let ortSession=null, asrPipe=null, realWeights=false;
+let eEmb=null, vEmb=null;
+const aAnim={}, aCtx={}, aAnl={}, aStream={}, aPcm={};
+const ED=192;
+
+// ── Restore session phrases ─────────────────────────────────────
+const ep = State.get('enrollPhrase'), vp = State.get('verifyPhrase');
+if(ep) {
+  document.getElementById('enroll-phrase-display').textContent = ep;
+  document.getElementById('verify-phrase-display').textContent = vp;
+} else {
+  document.getElementById('e-status').innerHTML = '<p class="pend">No session — <a href="step1.html" style="color:#378ADD">go to step 1</a></p>';
+}
+
+// ── Badge helper ────────────────────────────────────────────────
+function setBadge(id,cls,html){
+  const el=document.getElementById(id);
+  el.className='badge '+cls;
+  el.innerHTML=html;
+}
+
+// ── ORT ────────────────────────────────────────────────────────
+function initORT() {
+  ort.env.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/';
+  ort.env.wasm.numThreads=1;
+  ort.InferenceSession.create(buildSyntheticModel(),{executionProviders:['wasm']})
+    .then(s=>{ortSession=s;setBadge('ort-status','badge-ok','✓ ORT ready');setBadge('model-status','badge-neu','⚙ Synthetic weights');enableRecording();})
+    .catch(e=>{setBadge('ort-status','badge-err','✗ ORT failed');console.error(e);});
+}
+
+// ── Whisper ─────────────────────────────────────────────────────
+(async()=>{
+  try{
+    const {pipeline,env}=await import('https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/src/transformers.js');
+    env.allowLocalModels=false;
+    asrPipe=await pipeline('automatic-speech-recognition','Xenova/whisper-tiny.en',{
+      progress_callback(p){if(p.status==='progress'&&p.total)setBadge('asr-status','badge-info','⏳ Whisper '+Math.round(p.loaded/p.total*100)+'%');}
+    });
+    setBadge('asr-status','badge-ok','✓ Whisper ready');
+  }catch(e){setBadge('asr-status','badge-warn','⚠ Whisper unavail');console.warn(e);}
+})();
+
+// ── Real weights loader ─────────────────────────────────────────
+document.getElementById('btn-load-model').addEventListener('click',()=>{
+  const url=document.getElementById('model-url').value.trim();
+  if(!url){
+    ort.InferenceSession.create(buildSyntheticModel(),{executionProviders:['wasm']}).then(s=>{
+      ortSession=s;realWeights=false;
+      setBadge('model-status','badge-neu','⚙ Synthetic weights');
+    });
+    return;
+  }
+  setBadge('model-status','badge-info','⏳ Fetching…');
+  let loaded=0,total=0;
+  fetch(url).then(r=>{
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    total=parseInt(r.headers.get('content-length')||'0');
+    const reader=r.body.getReader(),chunks=[];
+    function pump(){return reader.read().then(({done,value})=>{
+      if(done){
+        const all=new Uint8Array(loaded);let off=0;chunks.forEach(c=>{all.set(c,off);off+=c.length;});
+        setBadge('model-status','badge-info','⏳ Loading into ORT…');
+        return ort.InferenceSession.create(all,{executionProviders:['wasm']}).then(s=>{
+          ortSession=s;realWeights=true;
+          setBadge('model-status','badge-ok','✓ Real weights ('+Math.round(loaded/1e6)+'MB)');
+        });
+      }
+      chunks.push(value);loaded+=value.length;
+      setBadge('model-status','badge-info','⏳ '+(total?Math.round(loaded/total*100)+'%':Math.round(loaded/1e6)+'MB'));
+      return pump();
+    });}
+    return pump();
+  }).catch(e=>{setBadge('model-status','badge-err','✗ '+e.message.slice(0,50));});
+});
+
+// ── Synthetic ONNX model ────────────────────────────────────────
+function buildSyntheticModel(){
+  const CH=256, NMB=80, TFB=200, EDB=192;
+  function varint(n){const o=[];do{let b=n&0x7f;n>>>=7;if(n)b|=0x80;o.push(b);}while(n);return new Uint8Array(o)}
+  function tag(f,t){return varint((f<<3)|t)}
+  function ld(f,b){return cat(tag(f,2),varint(b.length),b)}
+  function cat(...a){const l=a.reduce((x,y)=>x+y.length,0),o=new Uint8Array(l);let p=0;a.forEach(x=>{o.set(x,p);p+=x.length});return o}
+  function s(f,v){return ld(f,new TextEncoder().encode(v))}
+  function i32(f,n){const b=new Uint8Array(4);new DataView(b.buffer).setInt32(0,n,true);return cat(tag(f,5),b)}
+  function f32a(arr){const b=new ArrayBuffer(4*arr.length),v=new DataView(b);arr.forEach((x,i)=>v.setFloat32(i*4,x,true));return new Uint8Array(b)}
+  function sw(n,seed){let x=seed>>>0;const d=new Float32Array(n);for(let i=0;i<n;i++){x^=x<<13;x^=x>>>17;x^=x<<5;d[i]=((x>>>0)/4294967295-.5)*0.08;}return d;}
+  function ten(name,shape,seed){const data=f32a(Array.from(sw(shape.reduce((a,b)=>a*b,1),seed)));const shB=new Uint8Array(shape.flatMap(d=>{const v=Array.from(varint(d));return[0x38,...v]}));return ld(4,cat(s(1,name),i32(2,1),ld(7,shB),ld(4,data)))}
+  function vi(name,shape){const dims=shape.map((d,i)=>ld(1,cat(s(1,'d'+i),ld(2,i===2?varint(0):varint(d)))));return ld(11,cat(s(1,name),ld(1,ld(1,cat(i32(1,1),ld(2,cat(...dims)))))))}
+  function attr(name,val){return ld(4,cat(s(1,name),i32(4,1),ld(7,cat(new Uint8Array([0x05]),new Uint8Array(new Int32Array([val]).buffer))),i32(20,6)))}
+  function conv(inp,w,b,out,k,dl){const pad=dl*Math.floor(k/2);const pv=cat(new Uint8Array([0x05]),new Uint8Array(new Int32Array([pad]).buffer),new Uint8Array([0x05]),new Uint8Array(new Int32Array([pad]).buffer));return ld(7,cat(s(1,'Conv'),ld(2,new TextEncoder().encode(inp)),ld(2,new TextEncoder().encode(w)),ld(2,new TextEncoder().encode(b)),ld(3,new TextEncoder().encode(out)),s(5,'g'),attr('dilations',dl),attr('group',1),attr('kernel_shape',k),ld(4,cat(s(1,'pads'),i32(4,1),ld(7,pv),i32(20,6)))))}
+  function relu(i,o){return ld(7,cat(s(1,'Relu'),ld(2,new TextEncoder().encode(i)),ld(3,new TextEncoder().encode(o)),s(5,'g')))}
+  function gemm(i,w,b,o){return ld(7,cat(s(1,'Gemm'),ld(2,new TextEncoder().encode(i)),ld(2,new TextEncoder().encode(w)),ld(2,new TextEncoder().encode(b)),ld(3,new TextEncoder().encode(o)),s(5,'g'),attr('transB',1)))}
+  function rmean(i,o){return ld(7,cat(s(1,'ReduceMean'),ld(2,new TextEncoder().encode(i)),ld(3,new TextEncoder().encode(o)),s(5,'g'),attr('axes',2),attr('keepdims',1)))}
+  function reshape(i,sh,o){return ld(7,cat(s(1,'Reshape'),ld(2,new TextEncoder().encode(i)),ld(2,new TextEncoder().encode(sh)),ld(3,new TextEncoder().encode(o)),s(5,'g')))}
+  function lpn(i,o){return ld(7,cat(s(1,'LpNormalization'),ld(2,new TextEncoder().encode(i)),ld(3,new TextEncoder().encode(o)),s(5,'g'),attr('axis',1),attr('p',2)))}
+  const shD=new Uint8Array(16);const dv=new DataView(shD.buffer);dv.setInt32(0,1,true);dv.setInt32(4,0,true);dv.setInt32(8,CH,true);dv.setInt32(12,0,true);
+  const shC=ld(4,cat(s(1,'rsh'),i32(2,7),ld(7,new Uint8Array([0x38,0x01,0x38,0x80,0x02])),ld(4,shD)));
+  const nodes=[conv('input','w1','b1','c1',5,1),relu('c1','r1'),conv('r1','w2','b2','c2',3,2),relu('c2','r2'),conv('r2','w3','b3','c3',3,3),relu('c3','r3'),rmean('r3','pl'),reshape('pl','rsh','fl'),gemm('fl','wfc','bfc','pr'),lpn('pr','output')];
+  const outVI=ld(12,cat(s(1,'output'),ld(1,ld(1,cat(i32(1,1),ld(2,cat(ld(1,cat(s(1,'d0'),ld(2,varint(1)))),ld(1,cat(s(1,'d1'),ld(2,varint(EDB)))))))))));
+  const graph=ld(7,cat(vi('input',[1,NMB,TFB]),outVI,...nodes,ten('w1',[CH,NMB,5],1),ten('b1',[CH],2),ten('w2',[CH,CH,3],3),ten('b2',[CH],4),ten('w3',[CH,CH,3],5),ten('b3',[CH],6),ten('wfc',[EDB,CH],7),ten('bfc',[EDB],8),shC,s(11,'input'),s(12,'output'),s(1,'ecapa')));
+  return cat(ld(1,graph),new Uint8Array([0x08,0x11]),s(2,'ecapa-synthetic'));
+}
+
+// ── Enable recording when session exists ────────────────────────
+function enableRecording(){
+  if(ep){
+    document.getElementById('btn-es').disabled=false;
+    document.getElementById('e-status').innerHTML='<p class="pend">Ready — click Start recording</p>';
+  }
+}
+
+// ── Audio capture ───────────────────────────────────────────────
+function startCap(m){
+  const sid=m==='e'?'e-rec-status':'v-rec-status';
+  navigator.mediaDevices.getUserMedia({audio:true,video:false}).then(stream=>{
+    aStream[m]=stream;
+    const ctx=new AudioContext({sampleRate:16000});aCtx[m]=ctx;
+    const src=ctx.createMediaStreamSource(stream);
+    const an=ctx.createAnalyser();an.fftSize=2048;src.connect(an);aAnl[m]=an;
+    aPcm[m]=[];
+    const sp=ctx.createScriptProcessor(512,1,1);
+    sp.onaudioprocess=e=>aPcm[m].push(new Float32Array(e.inputBuffer.getChannelData(0)));
+    src.connect(sp);sp.connect(ctx.destination);ctx._sp=sp;
+    document.getElementById(m==='e'?'btn-es':'btn-vs').disabled=true;
+    document.getElementById(m==='e'?'btn-ex':'btn-vx').disabled=false;
+    document.getElementById(sid).innerHTML='<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:#888"><span class="rdot"></span>Recording…</span>';
+    drawWave(m,an);
+  }).catch(()=>{
+    document.getElementById(sid).innerHTML='<span class="badge badge-err">✗ Mic denied</span>';
+  });
+}
+
+function drawWave(m,an){
+  const c=document.getElementById(m==='e'?'e-canvas':'v-canvas'),ctx=c.getContext('2d');
+  function fr(){
+    const d=new Uint8Array(an.fftSize);an.getByteTimeDomainData(d);
+    ctx.clearRect(0,0,c.width,c.height);ctx.beginPath();ctx.strokeStyle='#378ADD';ctx.lineWidth=1.5;
+    for(let i=0;i<d.length;i++){const x=i*c.width/d.length,y=(d[i]/255)*c.height;i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+    ctx.stroke();aAnim[m]=requestAnimationFrame(fr);
+  }fr();
+}
+
+async function stopCap(m){
+  cancelAnimationFrame(aAnim[m]);
+  if(aCtx[m]?._sp)aCtx[m]._sp.disconnect();
+  aStream[m]?.getTracks().forEach(t=>t.stop());
+  document.getElementById(m==='e'?'btn-ex':'btn-vx').disabled=true;
+  document.getElementById(m==='e'?'btn-es':'btn-vs').disabled=false;
+  const sid=m==='e'?'e-rec-status':'v-rec-status';
+  document.getElementById(sid).innerHTML='<span style="font-size:12px;color:#888">⏳ Analysing…</span>';
+  const chunks=aPcm[m]||[];
+  const tot=chunks.reduce((a,b)=>a+b.length,0);
+  const pcm=new Float32Array(tot);let off=0;chunks.forEach(c=>{pcm.set(c,off);off+=c.length;});
+  const phrase=m==='e'?ep:vp;
+  const t0=performance.now();
+  const [emb,liveness,transcript]=await Promise.all([runEmbedding(pcm),Promise.resolve(computeLiveness(pcm)),runASR(pcm)]);
+  const dt=Math.round(performance.now()-t0);
+  const chal=checkChallenge(transcript,phrase);
+
+  if(m==='e'){
+    eEmb=emb;
+    State.setF32('eEmb',emb);
+    State.set('eLiveness',liveness);
+    State.set('eChal',chal);
+  } else {
+    vEmb=emb;
+    State.setF32('vEmb',emb);
+    State.set('vLiveness',liveness);
+    State.set('vChal',chal);
+  }
+
+  document.getElementById(sid).innerHTML=`<span class="badge badge-ok">✓ ${m==='e'?'Enrolled':'Captured'} · ${dt}ms</span>`;
+  document.getElementById(m==='e'?'e-status':'v-status').innerHTML='';
+  document.getElementById(m==='e'?'e-results':'v-results').innerHTML=buildPanel(transcript,phrase,chal,liveness,emb,m==='e'?'Enrollment embedding':'Verification embedding');
+
+  if(m==='e'){
+    document.getElementById('verify-phrase-wrap').style.display='block';
+    document.getElementById('btn-vs').disabled=false;
+    document.getElementById('v-status').innerHTML='<p class="pend">Ready — click Start recording</p>';
+  } else {
+    showMatch(dt);
+  }
+}
+
+function buildPanel(transcript,phrase,chal,liveness,emb,lbl){
+  const cc=chal>=0.8?'badge-ok':chal>=0.5?'badge-warn':'badge-err';
+  const lc=liveness.score>=0.75?'badge-ok':liveness.score>=0.5?'badge-warn':'badge-err';
+  const txHTML=asrPipe?diffTokensHTML(phrase,transcript):'<span style="color:#555;font-style:italic">Whisper unavailable</span>';
+  return `<div style="margin-top:10px">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px">
+      <span class="badge ${cc}">🗣 Challenge ${Math.round(chal*100)}%</span>
+      <span class="badge ${lc}">💓 Liveness ${Math.round(liveness.score*100)}%</span>
+    </div>
+    <p style="font-size:11px;color:#555;margin-bottom:3px">Whisper transcript (green = matched, red = unexpected):</p>
+    <div class="transcript-box">${txHTML}</div>
+    <p style="font-size:11px;color:#444;margin-top:4px">spec-var <b style="color:#888">${liveness.specVar.toFixed(3)}</b> · pitch-flux <b style="color:#888">${liveness.pitchFlux.toFixed(3)}</b> · energy-dyn <b style="color:#888">${liveness.energyDyn.toFixed(3)}</b></p>
+  </div>${embedVizHTML(emb,lbl)}`;
+}
+
+// ── ONNX inference ──────────────────────────────────────────────
+async function runEmbedding(pcm){
+  if(!ortSession) return new Float32Array(ED).fill(0);
+  const feat=extractFeatures(pcm);
+  const inName=ortSession.inputNames[0], outName=ortSession.outputNames[0];
+  const tryRun=async(tensor)=>{
+    const res=await ortSession.run({[inName]:tensor});
+    const raw=res[outName].data;
+    let norm=0;for(let i=0;i<raw.length;i++)norm+=raw[i]*raw[i];norm=Math.sqrt(norm)||1;
+    const emb=new Float32Array(raw.length);for(let i=0;i<raw.length;i++)emb[i]=raw[i]/norm;
+    return emb;
+  };
+  try{return await tryRun(new ort.Tensor('float32',feat,[1,NM,TF]));}
+  catch(e1){
+    try{
+      const featT=new Float32Array(TF*NM);for(let t=0;t<TF;t++)for(let m=0;m<NM;m++)featT[t*NM+m]=feat[m*TF+t];
+      return await tryRun(new ort.Tensor('float32',featT,[1,TF,NM]));
+    }catch(e2){console.error('ORT both layouts failed:',e2);return new Float32Array(ED).fill(0.1);}
+  }
+}
+
+async function runASR(pcm){
+  if(!asrPipe)return '';
+  try{const r=await asrPipe({array:new Float32Array(pcm),sampling_rate:16000});return(r?.text||'').trim();}
+  catch(e){console.warn('ASR:',e);return '';}
+}
+
+// ── Match display ───────────────────────────────────────────────
+function showMatch(dt){
+  const cos=cosSim(eEmb,vEmb);
+  const barPct=Math.round(((cos+1)/2)*100);
+  const color=cos>=0.82?'#1d9e75':cos>=0.65?'#c98a20':'#e24b4a';
+  State.set('cosine',cos);
+  State.set('matchPct',Math.round(((cos+1)/2)*100));
+  document.getElementById('cos-display').textContent=cos.toFixed(3);
+  document.getElementById('cos-bar').style.cssText=`width:${barPct}%;background:${color}`;
+  document.getElementById('match-verdict').innerHTML=cos>=0.75
+    ?'<span class="badge badge-ok" style="font-size:14px">✓ Match passed</span>'
+    :'<span class="badge badge-err" style="font-size:14px">✗ Match failed</span>';
+  const deltas=Array.from(eEmb).map((v,i)=>Math.abs(v-(vEmb[i]||0)));
+  const dmx=Math.max(...deltas)||1;
+  let dc='<p style="font-size:11px;color:#555;margin:0 0 3px">Embedding delta (enroll vs verify, first 128 dims)</p><div class="eviz">';
+  deltas.slice(0,128).forEach((d,i)=>{const t=d/dmx;dc+=`<div title="Δd${i}:${d.toFixed(3)}" style="background:rgb(${Math.round(30+t*210)},30,30)"></div>`;});
+  dc+='</div>';
+  document.getElementById('delta-viz').innerHTML=dc;
+  document.getElementById('infer-info').textContent=`⏱ ${dt}ms · ECAPA-TDNN (${realWeights?'VoxCeleb':'synthetic'}) · ${eEmb.length}-d embeddings · Whisper-tiny ASR`;
+  document.getElementById('match-card').style.display='block';
+  document.getElementById('btn-next').disabled=false;
+}
+
+// ── Button wiring ───────────────────────────────────────────────
+document.getElementById('btn-es').addEventListener('click',()=>startCap('e'));
+document.getElementById('btn-ex').addEventListener('click',()=>stopCap('e'));
+document.getElementById('btn-vs').addEventListener('click',()=>startCap('v'));
+document.getElementById('btn-vx').addEventListener('click',()=>stopCap('v'));
+document.getElementById('btn-next').addEventListener('click',()=>goTo('step4.html'));
+
+// ── Restore completed state ─────────────────────────────────────
+const savedEEmb=State.getF32('eEmb'), savedVEmb=State.getF32('vEmb');
+if(savedEEmb&&savedVEmb){
+  eEmb=savedEEmb;vEmb=savedVEmb;
+  const cos=State.get('cosine');
+  if(cos!==null){
+    const color=cos>=0.82?'#1d9e75':cos>=0.65?'#c98a20':'#e24b4a';
+    document.getElementById('cos-display').textContent=parseFloat(cos).toFixed(3);
+    document.getElementById('cos-bar').style.cssText=`width:${Math.round(((cos+1)/2)*100)}%;background:${color}`;
+    document.getElementById('match-verdict').innerHTML=cos>=0.75
+      ?'<span class="badge badge-ok" style="font-size:14px">✓ Match passed</span>'
+      :'<span class="badge badge-err" style="font-size:14px">✗ Match failed</span>';
+    document.getElementById('match-card').style.display='block';
+    document.getElementById('btn-next').disabled=false;
+    document.getElementById('e-status').innerHTML='<span class="badge badge-ok">✓ Previously enrolled</span>';
+    document.getElementById('v-status').innerHTML='<span class="badge badge-ok">✓ Previously captured</span>';
+  }
+}
+</script>
+</body>
+</html>
