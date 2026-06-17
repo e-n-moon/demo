@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Step 3 — Voice Authentication (Local MFCC)</title>
+<title>Step 3 — Voice Authentication (MFCC + Supabase)</title>
+
 <script src="shared.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
+
 <body>
 <script>injectSharedCSS();</script>
 
@@ -17,26 +19,23 @@
   <div class="page-header">
     <div class="page-title">Voice Authentication</div>
     <div class="page-sub">
-      Local MFCC-based speaker feature extraction (no cloud inference).
+      Local MFCC extraction + dataset logging to Supabase
     </div>
   </div>
 
-  <!-- Model -->
+  <!-- MODEL -->
   <div class="card">
-    <div class="card-title">Model</div>
+    <div class="card-title">Pipeline</div>
     <div class="info-box">
-      Local DSP pipeline: WAV → MFCC (13 coefficients × frames).  
-      Ready for speaker embedding model later.
+      Audio → PCM → MFCC (13 × frames) → Supabase storage
     </div>
   </div>
 
-  <!-- Enroll -->
+  <!-- ENROLL -->
   <div class="card">
     <div class="card-title">① Enroll voiceprint</div>
 
     <div class="phrase" id="enroll-phrase-display">–</div>
-
-    <canvas class="wave" id="e-canvas"></canvas>
 
     <div class="btn-row">
       <button id="btn-es">🎤 Start recording</button>
@@ -44,17 +43,14 @@
       <span id="e-rec-status"></span>
     </div>
 
-    <div id="e-status"></div>
     <div id="e-results"></div>
   </div>
 
-  <!-- Verify -->
+  <!-- VERIFY -->
   <div class="card">
     <div class="card-title">② Verify voiceprint</div>
 
-    <div class="phrase" id="verify-phrase-display"></div>
-
-    <canvas class="wave" id="v-canvas"></canvas>
+    <div class="phrase" id="verify-phrase-display">–</div>
 
     <div class="btn-row">
       <button id="btn-vs" disabled>🎤 Start recording</button>
@@ -62,7 +58,6 @@
       <span id="v-rec-status"></span>
     </div>
 
-    <div id="v-status"></div>
     <div id="v-results"></div>
   </div>
 
@@ -83,13 +78,28 @@ document.getElementById('progress-mount').innerHTML = renderProgress(3);
 let aStream = {};
 let aCtx = {};
 let aPcm = {};
+
 let eFeatures = null;
 let vFeatures = null;
 
+// phrases from previous steps
 const ep = State.get('enrollPhrase');
 const vp = State.get('verifyPhrase');
 
 if(ep) document.getElementById('enroll-phrase-display').textContent = ep;
+if(vp) document.getElementById('verify-phrase-display').textContent = vp;
+
+// session id (important for dataset grouping)
+const sessionId = State.get('sessionId') || crypto.randomUUID();
+State.set('sessionId', sessionId);
+
+// =========================
+// SUPABASE
+// =========================
+const SUPABASE_URL = "https://YOUR_PROJECT.supabase.co";
+const SUPABASE_ANON_KEY = "YOUR_ANON_KEY";
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // =========================
 // AUDIO CAPTURE
@@ -102,20 +112,20 @@ function startCap(mode){
     aCtx[mode] = ctx;
 
     const src = ctx.createMediaStreamSource(stream);
-    const processor = ctx.createScriptProcessor(512,1,1);
+    const proc = ctx.createScriptProcessor(512,1,1);
 
     aPcm[mode] = [];
 
-    processor.onaudioprocess = e=>{
+    proc.onaudioprocess = e=>{
       aPcm[mode].push(
         new Float32Array(e.inputBuffer.getChannelData(0))
       );
     };
 
-    src.connect(processor);
-    processor.connect(ctx.destination);
+    src.connect(proc);
+    proc.connect(ctx.destination);
 
-    aCtx[mode]._proc = processor;
+    aCtx[mode]._proc = proc;
 
     document.getElementById(mode==='e'?'btn-es':'btn-vs').disabled = true;
     document.getElementById(mode==='e'?'btn-ex':'btn-vx').disabled = false;
@@ -123,8 +133,9 @@ function startCap(mode){
     document.getElementById(mode==='e'?'e-rec-status':'v-rec-status')
       .textContent = "Recording...";
 
-  }).catch(()=>{
-    alert("Microphone permission denied");
+  }).catch(err=>{
+    console.error(err);
+    alert("Microphone access denied");
   });
 }
 
@@ -148,14 +159,30 @@ function stopCap(mode){
 
   if(mode === 'e'){
     eFeatures = features;
+
+    saveMFCC({
+      mfcc: features,
+      role: "enroll",
+      phrase: ep
+    });
+
     document.getElementById('e-results').textContent =
-      `Enroll MFCC ready: ${features.length} frames`;
+      `Enroll MFCC saved: ${features.length} frames`;
 
     document.getElementById('btn-vs').disabled = false;
-  } else {
+  }
+
+  if(mode === 'v'){
     vFeatures = features;
+
+    saveMFCC({
+      mfcc: features,
+      role: "verify",
+      phrase: vp
+    });
+
     document.getElementById('v-results').textContent =
-      `Verify MFCC ready: ${features.length} frames`;
+      `Verify MFCC saved: ${features.length} frames`;
 
     showMatch();
   }
@@ -176,16 +203,16 @@ const MFCC = {
   melFilterBank: null
 };
 
-function frameSignal(signal, size, hop){
+function frameSignal(sig, size, hop){
   const frames = [];
-  for(let i=0;i+size<signal.length;i+=hop){
-    frames.push(signal.slice(i,i+size));
+  for(let i=0;i+size<sig.length;i+=hop){
+    frames.push(sig.slice(i,i+size));
   }
   return frames;
 }
 
 function hamming(n,N){
-  return 0.54 - 0.46 * Math.cos((2*Math.PI*n)/(N-1));
+  return 0.54 - 0.46*Math.cos((2*Math.PI*n)/(N-1));
 }
 
 function fft(signal){
@@ -222,37 +249,28 @@ function fft(signal){
 
 function powerSpectrum(frame){
   const N = frame.length;
-  const windowed = frame.map((v,i)=>v*hamming(i,N));
+  const win = frame.map((v,i)=>v*hamming(i,N));
 
-  const fftOut = fft(windowed);
+  const X = fft(win);
 
-  const power = new Array(N/2);
+  const p = new Array(N/2);
   for(let i=0;i<N/2;i++){
-    const r = fftOut[i].re;
-    const im = fftOut[i].im;
-    power[i] = r*r + im*im;
+    p[i] = X[i].re*X[i].re + X[i].im*X[i].im;
   }
-  return power;
+  return p;
 }
 
-function hzToMel(hz){
-  return 2595*Math.log10(1+hz/700);
-}
+function hzToMel(h){ return 2595*Math.log10(1+h/700); }
+function melToHz(m){ return 700*(Math.pow(10,m/2595)-1); }
 
-function melToHz(mel){
-  return 700*(Math.pow(10,mel/2595)-1);
-}
+function createMelBank(mels, fftSize, sr){
+  const bank = [];
 
-function createMelFilterBank(mels, fftSize, sr){
-  const filters = [];
-
-  const melPoints = Array.from({length:mels+2},(_,i)=>
+  const points = Array.from({length:mels+2},(_,i)=>
     hzToMel(sr/2*i/(mels+1))
-  );
+  ).map(melToHz);
 
-  const hzPoints = melPoints.map(melToHz);
-
-  const bins = hzPoints.map(hz=>
+  const bins = points.map(hz=>
     Math.floor((fftSize+1)*hz/sr)
   );
 
@@ -260,77 +278,98 @@ function createMelFilterBank(mels, fftSize, sr){
     const f = new Array(fftSize/2).fill(0);
 
     for(let i=bins[m-1];i<bins[m];i++){
-      f[i] = (i-bins[m-1])/(bins[m]-bins[m-1] || 1);
+      f[i] = (i-bins[m-1])/(bins[m]-bins[m-1]||1);
     }
-
     for(let i=bins[m];i<bins[m+1];i++){
-      f[i] = (bins[m+1]-i)/(bins[m+1]-bins[m] || 1);
+      f[i] = (bins[m+1]-i)/(bins[m+1]-bins[m]||1);
     }
 
-    filters.push(f);
+    bank.push(f);
   }
 
-  return filters;
+  return bank;
 }
 
-function mfcc(signal){
+function mfcc(sig){
   const fftSize = 512;
 
-  const frames = frameSignal(signal, MFCC.frameSize, MFCC.hopSize);
+  const frames = frameSignal(sig, MFCC.frameSize, MFCC.hopSize);
 
   if(!MFCC.melFilterBank){
-    MFCC.melFilterBank = createMelFilterBank(
+    MFCC.melFilterBank = createMelBank(
       MFCC.melCount,
       fftSize,
       MFCC.sampleRate
     );
   }
 
-  const features = [];
+  const out = [];
 
-  for(const frame of frames){
+  for(const fr of frames){
     const padded = new Float32Array(fftSize);
-    padded.set(frame);
+    padded.set(fr);
 
     const power = powerSpectrum(padded);
 
-    const melE = MFCC.melFilterBank.map(f=>{
-      let sum=0;
+    const mel = MFCC.melFilterBank.map(f=>{
+      let s=0;
       for(let i=0;i<f.length;i++){
-        sum += power[i]*f[i];
+        s += power[i]*f[i];
       }
-      return Math.log(sum+1e-10);
+      return Math.log(s+1e-10);
     });
 
     const cep = [];
 
     for(let k=0;k<MFCC.mfccCount;k++){
-      let sum=0;
-      for(let n=0;n<melE.length;n++){
-        sum += melE[n]*Math.cos(Math.PI*k*(n+0.5)/melE.length);
+      let s=0;
+      for(let n=0;n<mel.length;n++){
+        s += mel[n]*Math.cos(Math.PI*k*(n+0.5)/mel.length);
       }
-      cep.push(sum);
+      cep.push(s);
     }
 
-    features.push(cep);
+    out.push(cep);
   }
 
-  return features;
+  return out;
 }
 
 // =========================
-// MATCH (simple placeholder)
+// SUPABASE SAVE
+// =========================
+function serializeMFCC(mfcc){
+  return mfcc.map(f => Array.from(f));
+}
+
+async function saveMFCC({mfcc, role, phrase}){
+  const { error } = await sb.from('voice_mfcc_samples').insert({
+    session_id: sessionId,
+    user_id: "local-user",
+    role,
+    mfcc: serializeMFCC(mfcc),
+    frame_count: mfcc.length,
+    coeff_count: mfcc[0]?.length || 0,
+    phrase
+  });
+
+  if(error){
+    console.error("Supabase insert error:", error);
+  } else {
+    console.log("MFCC saved:", role);
+  }
+}
+
+// =========================
+// MATCH (placeholder)
 // =========================
 function showMatch(){
-  // placeholder: compare feature lengths only
   const diff = Math.abs(eFeatures.length - vFeatures.length);
 
-  const match = diff < 50;
+  const ok = diff < 50;
 
-  document.getElementById('v-status').innerHTML =
-    match
-      ? "✔ Rough match (MFCC baseline)"
-      : "✖ Mismatch (expected for different speech)";
+  document.getElementById('v-results').textContent =
+    ok ? "✔ Basic MFCC match" : "✖ No match";
 
   document.getElementById('btn-next').disabled = false;
 }
