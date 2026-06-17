@@ -6,6 +6,8 @@
 <title>Step 3 — Voice Authentication</title>
 
 <script src="shared.js"></script>
+
+<!-- services (order matters) -->
 <script src="supabase.js"></script>
 <script src="audioService.js"></script>
 <script src="mfccService.js"></script>
@@ -22,7 +24,7 @@
   <div class="page-header">
     <div class="page-title">Voice Authentication</div>
     <div class="page-sub">
-      Record enrollment and verification samples for MFCC dataset generation
+      Record enrollment and verification samples for model training
     </div>
   </div>
 
@@ -34,19 +36,12 @@
 
   <!-- ENROLL -->
   <div class="card">
-    <div class="card-title">Enroll voiceprint</div>
+    <div class="card-title">① Enroll phrase</div>
 
-    <div style="font-size:12px;color:#888;margin-bottom:8px">
-      Read this phrase:
-    </div>
-
-    <div class="phrase" id="enroll-phrase-display"
-         style="font-size:18px;font-weight:600;margin-bottom:12px">
-      –
-    </div>
+    <div class="phrase" id="enroll-phrase">–</div>
 
     <div class="btn-row">
-      <button id="btn-es">🎤 Start</button>
+      <button id="btn-es">🎤 Start recording</button>
       <button id="btn-ex" disabled>⏹ Stop</button>
       <span id="e-status"></span>
     </div>
@@ -56,19 +51,12 @@
 
   <!-- VERIFY -->
   <div class="card">
-    <div class="card-title">Verify voiceprint</div>
+    <div class="card-title">② Verify phrase</div>
 
-    <div style="font-size:12px;color:#888;margin-bottom:8px">
-      Read this phrase:
-    </div>
-
-    <div class="phrase" id="verify-phrase-display"
-         style="font-size:18px;font-weight:600;margin-bottom:12px">
-      –
-    </div>
+    <div class="phrase" id="verify-phrase">–</div>
 
     <div class="btn-row">
-      <button id="btn-vs" disabled>🎤 Start</button>
+      <button id="btn-vs" disabled>🎤 Start recording</button>
       <button id="btn-vx" disabled>⏹ Stop</button>
       <span id="v-status"></span>
     </div>
@@ -81,116 +69,156 @@
 <div class="footer-nav">
   <button onclick="goTo('step2.html')">← Back</button>
   <span>Step 3 of 4</span>
-  <button class="primary" id="btn-next" disabled>Next →</button>
+  <button id="btn-next" class="primary" disabled>Next →</button>
 </div>
 
 <script>
 document.getElementById('progress-mount').innerHTML = renderProgress(3);
 
-// =========================
-// SESSION
-// =========================
-const sessionId = State.get("sessionId") || crypto.randomUUID();
-State.set("sessionId", sessionId);
+// ─────────────────────────────
+// STATE (MATCH STEP 1 EXACTLY)
+// ─────────────────────────────
+const sid = State.get('sid');
+const enrollPhrase = State.get('enrollPhrase');
+const verifyPhrase = State.get('verifyPhrase');
 
-document.getElementById("session-box").textContent = sessionId;
+document.getElementById('session-box').textContent =
+  sid ? `session: ${sid}` : '❌ missing session';
 
-// =========================
-// PHRASES
-// =========================
-const enrollPhrase = State.get("enrollPhrase") || "Say the enrollment phrase";
-const verifyPhrase = State.get("verifyPhrase") || "Say the verification phrase";
+document.getElementById('enroll-phrase').textContent = enrollPhrase || '–';
+document.getElementById('verify-phrase').textContent = verifyPhrase || '–';
 
-document.getElementById("enroll-phrase-display").textContent = enrollPhrase;
-document.getElementById("verify-phrase-display").textContent = verifyPhrase;
+// ─────────────────────────────
+// DEBUG GUARDS (IMPORTANT)
+// ─────────────────────────────
+console.log("services check", {
+  audio: !!window.createAudioRecorder,
+  mfcc: !!window.extractMFCC,
+  supabase: !!window.saveMFCCSample
+});
 
-// =========================
-// SERVICES
-// =========================
+// ─────────────────────────────
+// AUDIO
+// ─────────────────────────────
 const recorderE = createAudioRecorder();
 const recorderV = createAudioRecorder();
 
 let eMFCC = null;
 let vMFCC = null;
 
-// =========================
-// ENROLL
-// =========================
+// ─────────────────────────────
+// ENROLL FLOW
+// ─────────────────────────────
 async function startEnroll() {
-  document.getElementById("e-status").textContent = "Recording...";
-  await recorderE.start();
+  document.getElementById('e-status').textContent = "Recording...";
 
-  document.getElementById("btn-es").disabled = true;
-  document.getElementById("btn-ex").disabled = false;
+  try {
+    await recorderE.start();
+  } catch (e) {
+    console.error(e);
+    document.getElementById('e-status').textContent = "Mic error";
+    return;
+  }
+
+  toggle('btn-es', true);
+  toggle('btn-ex', false);
 }
 
 async function stopEnroll() {
-  document.getElementById("e-status").textContent = "Processing...";
+  document.getElementById('e-status').textContent = "Processing...";
 
   const pcm = recorderE.stop();
-  const mfcc = extractMFCC(pcm);
 
-  await saveMFCCSample({
-    sessionId,
-    mfcc,
+  if (!pcm || !pcm.length) {
+    document.getElementById('e-status').textContent = "No audio captured";
+    return;
+  }
+
+  const mfcc = extractMFCC(pcm);
+  eMFCC = mfcc;
+
+  const ok = await saveMFCCSample({
+    sessionId: sid,
     role: "enroll",
+    mfcc,
     phrase: enrollPhrase
   });
 
-  eMFCC = mfcc;
+  document.getElementById('e-results').textContent =
+    ok ? `Saved enroll (${mfcc.length} frames)` : `Save failed`;
 
-  document.getElementById("e-results").textContent =
-    `Saved enroll (${mfcc.length} frames)`;
+  document.getElementById('e-status').textContent = "Done";
 
-  document.getElementById("e-status").textContent = "Saved ✓";
-
-  document.getElementById("btn-vs").disabled = false;
+  toggle('btn-es', false);
+  toggle('btn-ex', true);
+  toggle('btn-vs', false);
 }
 
-// =========================
-// VERIFY
-// =========================
+// ─────────────────────────────
+// VERIFY FLOW
+// ─────────────────────────────
 async function startVerify() {
-  document.getElementById("v-status").textContent = "Recording...";
-  await recorderV.start();
+  document.getElementById('v-status').textContent = "Recording...";
 
-  document.getElementById("btn-vs").disabled = true;
-  document.getElementById("btn-vx").disabled = false;
+  try {
+    await recorderV.start();
+  } catch (e) {
+    console.error(e);
+    document.getElementById('v-status').textContent = "Mic error";
+    return;
+  }
+
+  toggle('btn-vs', true);
+  toggle('btn-vx', false);
 }
 
 async function stopVerify() {
-  document.getElementById("v-status").textContent = "Processing...";
+  document.getElementById('v-status').textContent = "Processing...";
 
   const pcm = recorderV.stop();
-  const mfcc = extractMFCC(pcm);
 
-  await saveMFCCSample({
-    sessionId,
-    mfcc,
+  if (!pcm || !pcm.length) {
+    document.getElementById('v-status').textContent = "No audio captured";
+    return;
+  }
+
+  const mfcc = extractMFCC(pcm);
+  vMFCC = mfcc;
+
+  const ok = await saveMFCCSample({
+    sessionId: sid,
     role: "verify",
+    mfcc,
     phrase: verifyPhrase
   });
 
-  vMFCC = mfcc;
+  document.getElementById('v-results').textContent =
+    ok ? `Saved verify (${mfcc.length} frames)` : `Save failed`;
 
-  document.getElementById("v-results").textContent =
-    `Saved verify (${mfcc.length} frames)`;
+  document.getElementById('btn-next').disabled = false;
 
-  document.getElementById("v-status").textContent = "Saved ✓";
-
-  document.getElementById("btn-next").disabled = false;
+  toggle('btn-vs', false);
+  toggle('btn-vx', true);
 }
 
-// =========================
+// ─────────────────────────────
+// UI HELPERS
+// ─────────────────────────────
+function toggle(id, disabled){
+  document.getElementById(id).disabled = disabled;
+}
+
+// ─────────────────────────────
 // BUTTONS
-// =========================
-document.getElementById("btn-es").onclick = startEnroll;
-document.getElementById("btn-ex").onclick = stopEnroll;
+// ─────────────────────────────
+document.getElementById('btn-es').onclick = startEnroll;
+document.getElementById('btn-ex').onclick = stopEnroll;
+document.getElementById('btn-vs').onclick = startVerify;
+document.getElementById('btn-vx').onclick = stopVerify;
 
-document.getElementById("btn-vs").onclick = startVerify;
-document.getElementById("btn-vx").onclick = stopVerify;
+document.getElementById('btn-next').onclick =
+  () => goTo('step4.html');
 
-document.getElementById("btn-next").onclick = () => goTo("step4.html");
 </script>
 
 </body>
