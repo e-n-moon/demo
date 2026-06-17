@@ -6,11 +6,7 @@
 <title>Step 3 — Voice Authentication</title>
 
 <script src="shared.js"></script>
-
-<!-- Supabase already initialized globally in supabase.js -->
 <script src="supabase.js"></script>
-
-<!-- Your new modular pipeline -->
 <script src="audioService.js"></script>
 <script src="mfccService.js"></script>
 <script src="supabaseService.js"></script>
@@ -19,162 +15,70 @@
 <body>
 <script>injectSharedCSS();</script>
 
-<div id="progress-mount"></div>
-
 <div class="page">
+  <h2>Voice Auth</h2>
 
-  <div class="page-header">
-    <div class="page-title">Voice Authentication</div>
-    <div class="page-sub">
-      UI layer only — audio, MFCC, and storage are modularized
-    </div>
-  </div>
+  <button id="btn-es">Start Enroll</button>
+  <button id="btn-ex">Stop Enroll</button>
 
-  <!-- ENROLL -->
-  <div class="card">
-    <div class="card-title">① Enroll voiceprint</div>
+  <br><br>
 
-    <div class="phrase" id="enroll-phrase-display">–</div>
+  <button id="btn-vs">Start Verify</button>
+  <button id="btn-vx">Stop Verify</button>
 
-    <div class="btn-row">
-      <button id="btn-es">🎤 Start recording</button>
-      <button id="btn-ex" disabled>⏹ Stop</button>
-      <span id="e-status"></span>
-    </div>
-
-    <div id="e-results"></div>
-  </div>
-
-  <!-- VERIFY -->
-  <div class="card">
-    <div class="card-title">② Verify voiceprint</div>
-
-    <div class="phrase" id="verify-phrase-display">–</div>
-
-    <div class="btn-row">
-      <button id="btn-vs" disabled>🎤 Start recording</button>
-      <button id="btn-vx" disabled>⏹ Stop</button>
-      <span id="v-status"></span>
-    </div>
-
-    <div id="v-results"></div>
-  </div>
-
-</div>
-
-<div class="footer-nav">
-  <button onclick="goTo('step2.html')">← Back</button>
-  <span>Step 3 of 4</span>
-  <button class="primary" id="btn-next" disabled>Next →</button>
+  <div id="log"></div>
 </div>
 
 <script>
-document.getElementById('progress-mount').innerHTML = renderProgress(3);
+const log = (m) => document.getElementById("log").innerText = m;
 
-// =========================
-// STATE
-// =========================
-const enrollPhrase = State.get("enrollPhrase");
-const verifyPhrase = State.get("verifyPhrase");
-
-document.getElementById("enroll-phrase-display").textContent = enrollPhrase || "–";
-document.getElementById("verify-phrase-display").textContent = verifyPhrase || "–";
-
-const sessionId = State.get("sessionId") || crypto.randomUUID();
-State.set("sessionId", sessionId);
-
-// =========================
-// SERVICES
-// =========================
 const recorderE = createAudioRecorder();
 const recorderV = createAudioRecorder();
 
-// =========================
-// STATE HOLDERS
-// =========================
-let eMFCC = null;
-let vMFCC = null;
+const sessionId = State?.get?.("sessionId") || crypto.randomUUID();
 
-// =========================
-// ENROLL FLOW
-// =========================
-async function startEnroll() {
-  document.getElementById("e-status").textContent = "Recording...";
+async function startE(){
   await recorderE.start();
-
-  document.getElementById("btn-es").disabled = true;
-  document.getElementById("btn-ex").disabled = false;
+  log("recording enroll...");
 }
 
-async function stopEnroll() {
-  document.getElementById("e-status").textContent = "Processing...";
-
+async function stopE(){
   const pcm = recorderE.stop();
-  eMFCC = extractMFCC(pcm);
+  const mfcc = extractMFCC(pcm);
 
   await saveMFCCSample({
     sessionId,
-    mfcc: eMFCC,
-    role: "enroll",
-    phrase: enrollPhrase
+    mfcc,
+    role:"enroll",
+    phrase:"test"
   });
 
-  document.getElementById("e-results").textContent =
-    `Enroll saved (${eMFCC.length} frames)`;
-
-  document.getElementById("e-status").textContent = "Saved ✓";
-
-  document.getElementById("btn-es").disabled = false;
-  document.getElementById("btn-ex").disabled = true;
-
-  document.getElementById("btn-vs").disabled = false;
+  log("enroll saved");
 }
 
-// =========================
-// VERIFY FLOW
-// =========================
-async function startVerify() {
-  document.getElementById("v-status").textContent = "Recording...";
+async function startV(){
   await recorderV.start();
-
-  document.getElementById("btn-vs").disabled = true;
-  document.getElementById("btn-vx").disabled = false;
+  log("recording verify...");
 }
 
-async function stopVerify() {
-  document.getElementById("v-status").textContent = "Processing...";
-
+async function stopV(){
   const pcm = recorderV.stop();
-  vMFCC = extractMFCC(pcm);
+  const mfcc = extractMFCC(pcm);
 
   await saveMFCCSample({
     sessionId,
-    mfcc: vMFCC,
-    role: "verify",
-    phrase: verifyPhrase
+    mfcc,
+    role:"verify",
+    phrase:"test"
   });
 
-  document.getElementById("v-results").textContent =
-    `Verify saved (${vMFCC.length} frames)`;
-
-  document.getElementById("v-status").textContent = "Saved ✓";
-
-  document.getElementById("btn-vs").disabled = false;
-  document.getElementById("btn-vx").disabled = true;
-
-  document.getElementById("btn-next").disabled = false;
+  log("verify saved");
 }
 
-// =========================
-// BUTTONS
-// =========================
-document.getElementById("btn-es").onclick = startEnroll;
-document.getElementById("btn-ex").onclick = stopEnroll;
-
-document.getElementById("btn-vs").onclick = startVerify;
-document.getElementById("btn-vx").onclick = stopVerify;
-
-document.getElementById("btn-next").onclick = () => goTo("step4.html");
+document.getElementById("btn-es").onclick = startE;
+document.getElementById("btn-ex").onclick = stopE;
+document.getElementById("btn-vs").onclick = startV;
+document.getElementById("btn-vx").onclick = stopV;
 </script>
 
 </body>
