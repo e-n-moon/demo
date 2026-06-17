@@ -19,26 +19,41 @@
 
 <div class="page">
 
+  <!-- HEADER (MATCH STEP 2 STYLE) -->
   <div class="page-header">
     <div class="page-title">Voice Authentication</div>
     <div class="page-sub">
-      Read the challenge phrase clearly during recording
+      Speaker verification using MFCC feature extraction. Audio is captured locally, transformed into cepstral coefficients, and stored for model development.
     </div>
   </div>
 
-  <!-- ENROLL -->
-  <div class="card">
-    <div class="card-title">① Enroll Voiceprint</div>
+  <!-- INFO BOX (CONSISTENT WITH STEP 2) -->
+  <div class="info-box">
+    This step performs <strong>biometric voice enrollment and verification</strong>.
+    You will be prompted to read a challenge phrase twice — once for enrollment and once for verification.
+    The system stores MFCC features in Supabase for later model training.
+  </div>
 
-    <div class="phrase-box">
-      <div style="font-size:12px;color:#666">Say this phrase:</div>
-      <div class="phrase" id="enroll-phrase-display"
-           style="font-size:20px;font-weight:600;margin-top:6px">
-        –
-      </div>
+  <!-- SESSION CARD -->
+  <div class="card">
+    <div class="card-title">Session context</div>
+    <div class="mono" id="session-box">
+      No session loaded
+    </div>
+  </div>
+
+  <!-- ENROLL CARD -->
+  <div class="card">
+    <div class="card-title">Enroll voiceprint</div>
+
+    <div style="font-size:12px;color:#888;margin-bottom:8px">
+      Read the following phrase clearly:
     </div>
 
-    <canvas class="wave" id="e-wave"></canvas>
+    <div class="phrase" id="enroll-phrase-display"
+         style="font-size:20px;font-weight:600;margin-bottom:12px">
+      –
+    </div>
 
     <div class="btn-row">
       <button id="btn-es">🎤 Start recording</button>
@@ -46,22 +61,21 @@
       <span id="e-status"></span>
     </div>
 
-    <div id="e-results"></div>
+    <div id="e-results" style="margin-top:10px"></div>
   </div>
 
-  <!-- VERIFY -->
+  <!-- VERIFY CARD -->
   <div class="card">
-    <div class="card-title">② Verify Voiceprint</div>
+    <div class="card-title">Verify voiceprint</div>
 
-    <div class="phrase-box">
-      <div style="font-size:12px;color:#666">Say this phrase:</div>
-      <div class="phrase" id="verify-phrase-display"
-           style="font-size:20px;font-weight:600;margin-top:6px">
-        –
-      </div>
+    <div style="font-size:12px;color:#888;margin-bottom:8px">
+      Read the following phrase:
     </div>
 
-    <canvas class="wave" id="v-wave"></canvas>
+    <div class="phrase" id="verify-phrase-display"
+         style="font-size:20px;font-weight:600;margin-bottom:12px">
+      –
+    </div>
 
     <div class="btn-row">
       <button id="btn-vs" disabled>🎤 Start recording</button>
@@ -69,31 +83,38 @@
       <span id="v-status"></span>
     </div>
 
-    <div id="v-results"></div>
+    <div id="v-results" style="margin-top:10px"></div>
   </div>
 
 </div>
 
+<!-- FOOTER (MATCH STEP 2 EXACTLY) -->
 <div class="footer-nav">
   <button onclick="goTo('step2.html')">← Back</button>
   <span>Step 3 of 4</span>
-  <button class="primary" id="btn-next" disabled>Next →</button>
+  <button class="primary" id="btn-next" disabled>Next: Risk engine →</button>
 </div>
 
 <script>
 document.getElementById('progress-mount').innerHTML = renderProgress(3);
 
 // =========================
-// STATE
+// SESSION
 // =========================
-const enrollPhrase = State.get("enrollPhrase") || "Please read the enrollment phrase";
-const verifyPhrase = State.get("verifyPhrase") || "Please read the verification phrase";
+const sessionId = State.get("sessionId") || crypto.randomUUID();
+State.set("sessionId", sessionId);
+
+document.getElementById("session-box").textContent =
+  `session_id: ${sessionId}`;
+
+// =========================
+// PHRASES
+// =========================
+const enrollPhrase = State.get("enrollPhrase") || "Say the enrollment phrase";
+const verifyPhrase = State.get("verifyPhrase") || "Say the verification phrase";
 
 document.getElementById("enroll-phrase-display").textContent = enrollPhrase;
 document.getElementById("verify-phrase-display").textContent = verifyPhrase;
-
-const sessionId = State.get("sessionId") || crypto.randomUUID();
-State.set("sessionId", sessionId);
 
 // =========================
 // SERVICES
@@ -101,57 +122,16 @@ State.set("sessionId", sessionId);
 const recorderE = createAudioRecorder();
 const recorderV = createAudioRecorder();
 
-// =========================
-// WAVEFORM VISUALIZER
-// =========================
-function createWave(canvasId, recorderRef) {
-  const canvas = document.getElementById(canvasId);
-  const ctx = canvas.getContext("2d");
-
-  function resize() {
-    canvas.width = canvas.offsetWidth;
-    canvas.height = canvas.offsetHeight;
-  }
-  resize();
-
-  function draw() {
-    requestAnimationFrame(draw);
-
-    const audio = recorderRef?.chunks || [];
-    const latest = audio[audio.length - 1];
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#0f0f0f";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    ctx.strokeStyle = "#4ade80";
-    ctx.beginPath();
-
-    if (latest) {
-      const step = canvas.width / latest.length;
-
-      for (let i = 0; i < latest.length; i++) {
-        const x = i * step;
-        const y = (latest[i] + 1) * canvas.height / 2;
-
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-    }
-
-    ctx.stroke();
-  }
-
-  draw();
-}
+let eMFCC = null;
+let vMFCC = null;
 
 // =========================
 // ENROLL
 // =========================
 async function startEnroll() {
+  document.getElementById("e-status").textContent = "Recording...";
   await recorderE.start();
 
-  document.getElementById("e-status").textContent = "Recording...";
   document.getElementById("btn-es").disabled = true;
   document.getElementById("btn-ex").disabled = false;
 }
@@ -169,8 +149,10 @@ async function stopEnroll() {
     phrase: enrollPhrase
   });
 
+  eMFCC = mfcc;
+
   document.getElementById("e-results").textContent =
-    `Saved enroll (${mfcc.length} frames)`;
+    `Enroll saved (${mfcc.length} frames)`;
 
   document.getElementById("e-status").textContent = "Saved ✓";
 
@@ -181,9 +163,9 @@ async function stopEnroll() {
 // VERIFY
 // =========================
 async function startVerify() {
+  document.getElementById("v-status").textContent = "Recording...";
   await recorderV.start();
 
-  document.getElementById("v-status").textContent = "Recording...";
   document.getElementById("btn-vs").disabled = true;
   document.getElementById("btn-vx").disabled = false;
 }
@@ -201,8 +183,10 @@ async function stopVerify() {
     phrase: verifyPhrase
   });
 
+  vMFCC = mfcc;
+
   document.getElementById("v-results").textContent =
-    `Saved verify (${mfcc.length} frames)`;
+    `Verify saved (${mfcc.length} frames)`;
 
   document.getElementById("v-status").textContent = "Saved ✓";
 
@@ -218,9 +202,7 @@ document.getElementById("btn-ex").onclick = stopEnroll;
 document.getElementById("btn-vs").onclick = startVerify;
 document.getElementById("btn-vx").onclick = stopVerify;
 
-// optional visual hooks (safe no-op if missing internals)
-createWave("e-wave", recorderE);
-createWave("v-wave", recorderV);
+document.getElementById("btn-next").onclick = () => goTo("step4.html");
 </script>
 
 </body>
