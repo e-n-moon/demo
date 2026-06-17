@@ -19,41 +19,18 @@
 
 <div class="page">
 
-  <!-- HEADER (MATCH STEP 2 STYLE) -->
   <div class="page-header">
     <div class="page-title">Voice Authentication</div>
     <div class="page-sub">
-      Speaker verification using MFCC feature extraction. Audio is captured locally, transformed into cepstral coefficients, and stored for model development.
+      Speaker verification using MFCC feature extraction. Audio is captured locally and stored for model development.
     </div>
   </div>
 
-  <!-- INFO BOX (CONSISTENT WITH STEP 2) -->
-  <div class="info-box">
-    This step performs <strong>biometric voice enrollment and verification</strong>.
-    You will be prompted to read a challenge phrase twice — once for enrollment and once for verification.
-    The system stores MFCC features in Supabase for later model training.
-  </div>
-
-  <!-- SESSION CARD -->
+  <!-- ENROLL -->
   <div class="card">
-    <div class="card-title">Session context</div>
-    <div class="mono" id="session-box">
-      No session loaded
-    </div>
-  </div>
+    <div class="card-title">① Enroll voiceprint</div>
 
-  <!-- ENROLL CARD -->
-  <div class="card">
-    <div class="card-title">Enroll voiceprint</div>
-
-    <div style="font-size:12px;color:#888;margin-bottom:8px">
-      Read the following phrase clearly:
-    </div>
-
-    <div class="phrase" id="enroll-phrase-display"
-         style="font-size:20px;font-weight:600;margin-bottom:12px">
-      –
-    </div>
+    <div class="phrase" id="enroll-phrase-display">–</div>
 
     <div class="btn-row">
       <button id="btn-es">🎤 Start recording</button>
@@ -61,21 +38,14 @@
       <span id="e-status"></span>
     </div>
 
-    <div id="e-results" style="margin-top:10px"></div>
+    <div id="e-results"></div>
   </div>
 
-  <!-- VERIFY CARD -->
+  <!-- VERIFY -->
   <div class="card">
-    <div class="card-title">Verify voiceprint</div>
+    <div class="card-title">② Verify voiceprint</div>
 
-    <div style="font-size:12px;color:#888;margin-bottom:8px">
-      Read the following phrase:
-    </div>
-
-    <div class="phrase" id="verify-phrase-display"
-         style="font-size:20px;font-weight:600;margin-bottom:12px">
-      –
-    </div>
+    <div class="phrase" id="verify-phrase-display">–</div>
 
     <div class="btn-row">
       <button id="btn-vs" disabled>🎤 Start recording</button>
@@ -83,38 +53,31 @@
       <span id="v-status"></span>
     </div>
 
-    <div id="v-results" style="margin-top:10px"></div>
+    <div id="v-results"></div>
   </div>
 
 </div>
 
-<!-- FOOTER (MATCH STEP 2 EXACTLY) -->
 <div class="footer-nav">
   <button onclick="goTo('step2.html')">← Back</button>
   <span>Step 3 of 4</span>
-  <button class="primary" id="btn-next" disabled>Next: Risk engine →</button>
+  <button class="primary" id="btn-next" disabled>Next →</button>
 </div>
 
 <script>
 document.getElementById('progress-mount').innerHTML = renderProgress(3);
 
 // =========================
-// SESSION
+// STATE
 // =========================
+const enrollPhrase = State.get("enrollPhrase");
+const verifyPhrase = State.get("verifyPhrase");
+
+document.getElementById("enroll-phrase-display").textContent = enrollPhrase || "–";
+document.getElementById("verify-phrase-display").textContent = verifyPhrase || "–";
+
 const sessionId = State.get("sessionId") || crypto.randomUUID();
 State.set("sessionId", sessionId);
-
-document.getElementById("session-box").textContent =
-  `session_id: ${sessionId}`;
-
-// =========================
-// PHRASES
-// =========================
-const enrollPhrase = State.get("enrollPhrase") || "Say the enrollment phrase";
-const verifyPhrase = State.get("verifyPhrase") || "Say the verification phrase";
-
-document.getElementById("enroll-phrase-display").textContent = enrollPhrase;
-document.getElementById("verify-phrase-display").textContent = verifyPhrase;
 
 // =========================
 // SERVICES
@@ -122,11 +85,14 @@ document.getElementById("verify-phrase-display").textContent = verifyPhrase;
 const recorderE = createAudioRecorder();
 const recorderV = createAudioRecorder();
 
+// =========================
+// STATE HOLDERS
+// =========================
 let eMFCC = null;
 let vMFCC = null;
 
 // =========================
-// ENROLL
+// ENROLL FLOW
 // =========================
 async function startEnroll() {
   document.getElementById("e-status").textContent = "Recording...";
@@ -160,7 +126,7 @@ async function stopEnroll() {
 }
 
 // =========================
-// VERIFY
+// VERIFY FLOW
 // =========================
 async function startVerify() {
   document.getElementById("v-status").textContent = "Recording...";
