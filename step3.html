@@ -22,18 +22,31 @@
   <div class="page-header">
     <div class="page-title">Voice Authentication</div>
     <div class="page-sub">
-      Speaker verification using MFCC feature extraction. Audio is captured locally and stored for model development.
+      Record enrollment and verification samples for MFCC dataset generation
     </div>
+  </div>
+
+  <!-- SESSION -->
+  <div class="card">
+    <div class="card-title">Session</div>
+    <div class="mono" id="session-box">–</div>
   </div>
 
   <!-- ENROLL -->
   <div class="card">
-    <div class="card-title">① Enroll voiceprint</div>
+    <div class="card-title">Enroll voiceprint</div>
 
-    <div class="phrase" id="enroll-phrase-display">–</div>
+    <div style="font-size:12px;color:#888;margin-bottom:8px">
+      Read this phrase:
+    </div>
+
+    <div class="phrase" id="enroll-phrase-display"
+         style="font-size:18px;font-weight:600;margin-bottom:12px">
+      –
+    </div>
 
     <div class="btn-row">
-      <button id="btn-es">🎤 Start recording</button>
+      <button id="btn-es">🎤 Start</button>
       <button id="btn-ex" disabled>⏹ Stop</button>
       <span id="e-status"></span>
     </div>
@@ -43,12 +56,19 @@
 
   <!-- VERIFY -->
   <div class="card">
-    <div class="card-title">② Verify voiceprint</div>
+    <div class="card-title">Verify voiceprint</div>
 
-    <div class="phrase" id="verify-phrase-display">–</div>
+    <div style="font-size:12px;color:#888;margin-bottom:8px">
+      Read this phrase:
+    </div>
+
+    <div class="phrase" id="verify-phrase-display"
+         style="font-size:18px;font-weight:600;margin-bottom:12px">
+      –
+    </div>
 
     <div class="btn-row">
-      <button id="btn-vs" disabled>🎤 Start recording</button>
+      <button id="btn-vs" disabled>🎤 Start</button>
       <button id="btn-vx" disabled>⏹ Stop</button>
       <span id="v-status"></span>
     </div>
@@ -68,16 +88,21 @@
 document.getElementById('progress-mount').innerHTML = renderProgress(3);
 
 // =========================
-// STATE
+// SESSION
 // =========================
-const enrollPhrase = State.get("enrollPhrase");
-const verifyPhrase = State.get("verifyPhrase");
-
-document.getElementById("enroll-phrase-display").textContent = enrollPhrase || "–";
-document.getElementById("verify-phrase-display").textContent = verifyPhrase || "–";
-
 const sessionId = State.get("sessionId") || crypto.randomUUID();
 State.set("sessionId", sessionId);
+
+document.getElementById("session-box").textContent = sessionId;
+
+// =========================
+// PHRASES
+// =========================
+const enrollPhrase = State.get("enrollPhrase") || "Say the enrollment phrase";
+const verifyPhrase = State.get("verifyPhrase") || "Say the verification phrase";
+
+document.getElementById("enroll-phrase-display").textContent = enrollPhrase;
+document.getElementById("verify-phrase-display").textContent = verifyPhrase;
 
 // =========================
 // SERVICES
@@ -85,14 +110,11 @@ State.set("sessionId", sessionId);
 const recorderE = createAudioRecorder();
 const recorderV = createAudioRecorder();
 
-// =========================
-// STATE HOLDERS
-// =========================
 let eMFCC = null;
 let vMFCC = null;
 
 // =========================
-// ENROLL FLOW
+// ENROLL
 // =========================
 async function startEnroll() {
   document.getElementById("e-status").textContent = "Recording...";
@@ -118,7 +140,7 @@ async function stopEnroll() {
   eMFCC = mfcc;
 
   document.getElementById("e-results").textContent =
-    `Enroll saved (${mfcc.length} frames)`;
+    `Saved enroll (${mfcc.length} frames)`;
 
   document.getElementById("e-status").textContent = "Saved ✓";
 
@@ -126,7 +148,7 @@ async function stopEnroll() {
 }
 
 // =========================
-// VERIFY FLOW
+// VERIFY
 // =========================
 async function startVerify() {
   document.getElementById("v-status").textContent = "Recording...";
@@ -152,7 +174,7 @@ async function stopVerify() {
   vMFCC = mfcc;
 
   document.getElementById("v-results").textContent =
-    `Verify saved (${mfcc.length} frames)`;
+    `Saved verify (${mfcc.length} frames)`;
 
   document.getElementById("v-status").textContent = "Saved ✓";
 
