@@ -15,70 +15,212 @@
 <body>
 <script>injectSharedCSS();</script>
 
+<div id="progress-mount"></div>
+
 <div class="page">
-  <h2>Voice Auth</h2>
 
-  <button id="btn-es">Start Enroll</button>
-  <button id="btn-ex">Stop Enroll</button>
+  <div class="page-header">
+    <div class="page-title">Voice Authentication</div>
+    <div class="page-sub">
+      Read the challenge phrase clearly during recording
+    </div>
+  </div>
 
-  <br><br>
+  <!-- ENROLL -->
+  <div class="card">
+    <div class="card-title">① Enroll Voiceprint</div>
 
-  <button id="btn-vs">Start Verify</button>
-  <button id="btn-vx">Stop Verify</button>
+    <div class="phrase-box">
+      <div style="font-size:12px;color:#666">Say this phrase:</div>
+      <div class="phrase" id="enroll-phrase-display"
+           style="font-size:20px;font-weight:600;margin-top:6px">
+        –
+      </div>
+    </div>
 
-  <div id="log"></div>
+    <canvas class="wave" id="e-wave"></canvas>
+
+    <div class="btn-row">
+      <button id="btn-es">🎤 Start recording</button>
+      <button id="btn-ex" disabled>⏹ Stop</button>
+      <span id="e-status"></span>
+    </div>
+
+    <div id="e-results"></div>
+  </div>
+
+  <!-- VERIFY -->
+  <div class="card">
+    <div class="card-title">② Verify Voiceprint</div>
+
+    <div class="phrase-box">
+      <div style="font-size:12px;color:#666">Say this phrase:</div>
+      <div class="phrase" id="verify-phrase-display"
+           style="font-size:20px;font-weight:600;margin-top:6px">
+        –
+      </div>
+    </div>
+
+    <canvas class="wave" id="v-wave"></canvas>
+
+    <div class="btn-row">
+      <button id="btn-vs" disabled>🎤 Start recording</button>
+      <button id="btn-vx" disabled>⏹ Stop</button>
+      <span id="v-status"></span>
+    </div>
+
+    <div id="v-results"></div>
+  </div>
+
+</div>
+
+<div class="footer-nav">
+  <button onclick="goTo('step2.html')">← Back</button>
+  <span>Step 3 of 4</span>
+  <button class="primary" id="btn-next" disabled>Next →</button>
 </div>
 
 <script>
-const log = (m) => document.getElementById("log").innerText = m;
+document.getElementById('progress-mount').innerHTML = renderProgress(3);
 
+// =========================
+// STATE
+// =========================
+const enrollPhrase = State.get("enrollPhrase") || "Please read the enrollment phrase";
+const verifyPhrase = State.get("verifyPhrase") || "Please read the verification phrase";
+
+document.getElementById("enroll-phrase-display").textContent = enrollPhrase;
+document.getElementById("verify-phrase-display").textContent = verifyPhrase;
+
+const sessionId = State.get("sessionId") || crypto.randomUUID();
+State.set("sessionId", sessionId);
+
+// =========================
+// SERVICES
+// =========================
 const recorderE = createAudioRecorder();
 const recorderV = createAudioRecorder();
 
-const sessionId = State?.get?.("sessionId") || crypto.randomUUID();
+// =========================
+// WAVEFORM VISUALIZER
+// =========================
+function createWave(canvasId, recorderRef) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext("2d");
 
-async function startE(){
-  await recorderE.start();
-  log("recording enroll...");
+  function resize() {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+  }
+  resize();
+
+  function draw() {
+    requestAnimationFrame(draw);
+
+    const audio = recorderRef?.chunks || [];
+    const latest = audio[audio.length - 1];
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#0f0f0f";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = "#4ade80";
+    ctx.beginPath();
+
+    if (latest) {
+      const step = canvas.width / latest.length;
+
+      for (let i = 0; i < latest.length; i++) {
+        const x = i * step;
+        const y = (latest[i] + 1) * canvas.height / 2;
+
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+    }
+
+    ctx.stroke();
+  }
+
+  draw();
 }
 
-async function stopE(){
+// =========================
+// ENROLL
+// =========================
+async function startEnroll() {
+  await recorderE.start();
+
+  document.getElementById("e-status").textContent = "Recording...";
+  document.getElementById("btn-es").disabled = true;
+  document.getElementById("btn-ex").disabled = false;
+}
+
+async function stopEnroll() {
+  document.getElementById("e-status").textContent = "Processing...";
+
   const pcm = recorderE.stop();
   const mfcc = extractMFCC(pcm);
 
   await saveMFCCSample({
     sessionId,
     mfcc,
-    role:"enroll",
-    phrase:"test"
+    role: "enroll",
+    phrase: enrollPhrase
   });
 
-  log("enroll saved");
+  document.getElementById("e-results").textContent =
+    `Saved enroll (${mfcc.length} frames)`;
+
+  document.getElementById("e-status").textContent = "Saved ✓";
+
+  document.getElementById("btn-vs").disabled = false;
 }
 
-async function startV(){
+// =========================
+// VERIFY
+// =========================
+async function startVerify() {
   await recorderV.start();
-  log("recording verify...");
+
+  document.getElementById("v-status").textContent = "Recording...";
+  document.getElementById("btn-vs").disabled = true;
+  document.getElementById("btn-vx").disabled = false;
 }
 
-async function stopV(){
+async function stopVerify() {
+  document.getElementById("v-status").textContent = "Processing...";
+
   const pcm = recorderV.stop();
   const mfcc = extractMFCC(pcm);
 
   await saveMFCCSample({
     sessionId,
     mfcc,
-    role:"verify",
-    phrase:"test"
+    role: "verify",
+    phrase: verifyPhrase
   });
 
-  log("verify saved");
+  document.getElementById("v-results").textContent =
+    `Saved verify (${mfcc.length} frames)`;
+
+  document.getElementById("v-status").textContent = "Saved ✓";
+
+  document.getElementById("btn-next").disabled = false;
 }
 
-document.getElementById("btn-es").onclick = startE;
-document.getElementById("btn-ex").onclick = stopE;
-document.getElementById("btn-vs").onclick = startV;
-document.getElementById("btn-vx").onclick = stopV;
+// =========================
+// BUTTONS
+// =========================
+document.getElementById("btn-es").onclick = startEnroll;
+document.getElementById("btn-ex").onclick = stopEnroll;
+
+document.getElementById("btn-vs").onclick = startVerify;
+document.getElementById("btn-vx").onclick = stopVerify;
+
+// optional visual hooks (safe no-op if missing internals)
+createWave("e-wave", recorderE);
+createWave("v-wave", recorderV);
 </script>
 
 </body>
