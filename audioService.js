@@ -1,4 +1,4 @@
-export function createAudioRecorder() {
+function createAudioRecorder() {
   let ctx;
   let stream;
   let chunks = [];
@@ -42,3 +42,7 @@ export function createAudioRecorder() {
 
   return { start, stop };
 }
+
+window.createAudioRecorder = createAudioRecorder;
+
+console.log("✔ audioService loaded");
